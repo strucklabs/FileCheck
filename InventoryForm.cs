@@ -18,7 +18,7 @@ internal sealed class InventoryForm : Form
     private readonly Button cancel = CreateButton("Abbrechen");
     private readonly Button export = CreateButton("CSV exportieren");
     private readonly CheckBox[] statusFilters = Enum.GetValues<FileStatus>()
-        .Select(status => new CheckBox { Appearance = Appearance.Button, AutoSize = true, Tag = status }).ToArray();
+        .Select(CreateStatusFilter).ToArray();
     private readonly TextBox nameFilter = new() { PlaceholderText = "Name oder Pfad suchen", Width = 208 };
     private readonly ComboBox folderFilter = CreateDropdown(208);
     private readonly ComboBox extensionFilter = CreateDropdown(126);
@@ -221,7 +221,13 @@ internal sealed class InventoryForm : Form
         export.Click += (_, _) => ExportCsv();
 
         foreach (CheckBox filter in statusFilters)
-            filter.CheckedChanged += (_, _) => ApplyFilters();
+        {
+            filter.CheckedChanged += (_, _) =>
+            {
+                UpdateStatusFilterAppearance(filter);
+                ApplyFilters();
+            };
+        }
         nameFilter.TextChanged += (_, _) => ApplyFilters();
         folderFilter.SelectedIndexChanged += (_, _) => ApplyFilters();
         extensionFilter.SelectedIndexChanged += (_, _) => ApplyFilters();
@@ -582,6 +588,35 @@ internal sealed class InventoryForm : Form
     {
         Text = text, ForeColor = color, AutoSize = true, Margin = new Padding(2, 6, 8, 4)
     };
+
+    private static CheckBox CreateStatusFilter(FileStatus status)
+    {
+        var filter = new CheckBox
+        {
+            Appearance = Appearance.Button, AutoSize = true, Tag = status,
+            FlatStyle = FlatStyle.Flat, UseVisualStyleBackColor = false,
+            MinimumSize = new Size(0, 30), Margin = new Padding(2, 2, 6, 4)
+        };
+        UpdateStatusFilterAppearance(filter);
+        return filter;
+    }
+
+    private static void UpdateStatusFilterAppearance(CheckBox filter)
+    {
+        bool highContrast = SystemInformation.HighContrast;
+        Color selected = highContrast ? SystemColors.Highlight : Accent;
+        Color idle = highContrast ? SystemColors.Window : Color.White;
+        filter.BackColor = filter.Checked ? selected : idle;
+        filter.ForeColor = filter.Checked
+            ? (highContrast ? SystemColors.HighlightText : Color.White)
+            : (highContrast ? SystemColors.WindowText : Ink);
+        filter.FlatAppearance.BorderColor = filter.Checked ? selected
+            : (highContrast ? SystemColors.WindowText : Color.FromArgb(166, 184, 197));
+        filter.FlatAppearance.CheckedBackColor = selected;
+        filter.FlatAppearance.MouseOverBackColor = highContrast ? filter.BackColor
+            : filter.Checked ? Color.FromArgb(16, 73, 96) : Surface;
+        filter.FlatAppearance.MouseDownBackColor = filter.FlatAppearance.MouseOverBackColor;
+    }
 
     private static Button CreateButton(string text, bool primary = false)
     {
