@@ -3,7 +3,7 @@ using FilesizeChecker.Inventory;
 
 namespace FilesizeChecker;
 
-internal sealed class InventoryForm : Form
+internal sealed partial class InventoryForm : Form
 {
     private static readonly Color Ink = Color.FromArgb(24, 38, 50);
     private static readonly Color Muted = Color.FromArgb(75, 91, 105);
@@ -177,6 +177,8 @@ internal sealed class InventoryForm : Form
         storageLayout.Controls.Add(byFolder, 1, 2);
         storageTab.Controls.Add(storageLayout);
         tabControl.TabPages.Add(storageTab);
+        tabControl.TabPages.Add(BuildDuplicateTab());
+        tabControl.TabPages.Add(BuildSortPlanTab());
 
         issueTab.Padding = new Padding(8);
         issueTab.Controls.Add(issues);
@@ -215,14 +217,19 @@ internal sealed class InventoryForm : Form
 
     private void WireEvents()
     {
-        Shown += (_, _) => LoadSnapshot();
+        Shown += (_, _) =>
+        {
+            LoadSnapshot();
+            LoadSortRules();
+        };
         FormClosing += (_, args) =>
         {
-            if (scanning is null)
+            if (scanning is null && duplicateRun is null)
                 return;
-            scanning.Cancel();
+            scanning?.Cancel();
+            duplicateRun?.Cancel();
             args.Cancel = true;
-            scanStatus.Text = "Scan wird abgebrochen. Das Fenster kann danach geschlossen werden.";
+            scanStatus.Text = "Die laufende Suche wird angehalten. Das Fenster kann danach geschlossen werden.";
         };
         addRoot.Click += (_, _) => AddRoot();
         removeRoot.Click += (_, _) =>
@@ -336,7 +343,7 @@ internal sealed class InventoryForm : Form
     private async Task ScanAsync()
     {
         var scanRoots = roots.Items.Cast<string>().ToArray();
-        if (scanRoots.Length == 0 || scanning is not null || !storeReadable)
+        if (scanRoots.Length == 0 || scanning is not null || duplicateRun is not null || !storeReadable)
             return;
 
         using var cancellation = new CancellationTokenSource();
@@ -408,6 +415,8 @@ internal sealed class InventoryForm : Form
         }
         issueTab.Text = $"Scan-Hinweise ({issueCount:N0})";
         RefreshStorage();
+        RefreshDuplicateSource();
+        ClearSortPlan();
         UpdateActions();
     }
 
@@ -522,7 +531,7 @@ internal sealed class InventoryForm : Form
     private void RefreshStorageBreakdown(bool sizes)
     {
         IEnumerable<StorageRow> groups = allFiles.Where(IsPresent).Select(result => result.File)
-            .GroupBy(file => sizes ? SizeClass(file.Bytes) : ExtensionLabel(file.Extension), InventoryPaths.Comparer)
+            .GroupBy(file => sizes ? InventoryLabels.SizeClass(file.Bytes) : ExtensionLabel(file.Extension), InventoryPaths.Comparer)
             .Select(group => new StorageRow(group.Key, group.Count(), group.Sum(file => file.Bytes)))
             .OrderByDescending(row => row.Bytes).ThenBy(row => row.Group);
         FillStorageGrid(byType, groups);
@@ -551,13 +560,15 @@ internal sealed class InventoryForm : Form
 
     private void UpdateActions()
     {
-        bool idle = scanning is null;
+        bool idle = scanning is null && duplicateRun is null;
         addRoot.Enabled = idle;
         roots.Enabled = idle;
         removeRoot.Enabled = idle && roots.SelectedIndex >= 0;
         scan.Enabled = idle && storeReadable && roots.Items.Count > 0;
         cancel.Enabled = !idle && scanning?.IsCancellationRequested == false;
         export.Enabled = visibleFiles.Count > 0;
+        UpdateDuplicateActions();
+        UpdateSortPlanActions();
     }
 
     private void ShowError(string heading, Exception error) => MessageBox.Show(this, $"{heading}\n\n{error.Message}",
@@ -566,15 +577,6 @@ internal sealed class InventoryForm : Form
     private static bool IsPresent(FileResult result) => result.Status is not (FileStatus.Missing or FileStatus.Unavailable);
 
     private static string ExtensionLabel(string extension) => extension.Length == 0 ? "Ohne Endung" : extension.ToLowerInvariant();
-
-    private static string SizeClass(long bytes) => bytes switch
-    {
-        < 1_024 => "Unter 1 KiB",
-        < 1_048_576 => "1 KiB bis unter 1 MiB",
-        < 104_857_600 => "1 MiB bis unter 100 MiB",
-        < 1_073_741_824 => "100 MiB bis unter 1 GiB",
-        _ => "Ab 1 GiB"
-    };
 
     private static void FillStorageGrid(DataGridView grid, IEnumerable<StorageRow> rows)
     {

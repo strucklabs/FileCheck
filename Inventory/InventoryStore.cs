@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace FilesizeChecker.Inventory;
@@ -9,43 +8,11 @@ internal partial class InventoryJson : JsonSerializerContext;
 
 internal sealed class InventoryStore(string filePath)
 {
-    public InventorySnapshot? Load()
-    {
-        try
-        {
-            using FileStream stream = File.OpenRead(filePath);
-            return JsonSerializer.Deserialize(stream, InventoryJson.Default.InventorySnapshot)
-                ?? throw new InvalidDataException("Das gespeicherte Inventar ist leer.");
-        }
-        catch (FileNotFoundException)
-        {
-            return null;
-        }
-        catch (DirectoryNotFoundException)
-        {
-            return null;
-        }
-    }
+    public string DataFolder => Path.GetDirectoryName(filePath)!;
 
-    public void Save(InventorySnapshot snapshot)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
-        string temporaryPath = filePath + ".tmp";
-        try
-        {
-            using (var stream = new FileStream(temporaryPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            {
-                JsonSerializer.Serialize(stream, snapshot, InventoryJson.Default.InventorySnapshot);
-                stream.Flush(flushToDisk: true);
-            }
-            File.Move(temporaryPath, filePath, overwrite: true);
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-                File.Delete(temporaryPath);
-        }
-    }
+    public InventorySnapshot? Load() => LocalJsonFile.Load(filePath, InventoryJson.Default.InventorySnapshot);
+
+    public void Save(InventorySnapshot snapshot) => LocalJsonFile.Save(filePath, snapshot, InventoryJson.Default.InventorySnapshot);
 
     public static void ExportCsv(string path, IEnumerable<FileResult> rows)
     {
