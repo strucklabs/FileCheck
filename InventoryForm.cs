@@ -116,31 +116,10 @@ internal sealed partial class InventoryForm : Form
         inventoryLayout.Controls.Add(Flow(statusFilters), 0, 0);
         inventoryLayout.Controls.Add(Flow(nameFilter, folderFilter, extensionFilter,
             CreateLabel("Min. MiB", Muted), minSize, CreateLabel("Max. MiB (0 = alle)", Muted), maxSize), 0, 1);
-        var dateFilterRow = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            ColumnCount = 2, RowCount = 1, Margin = new Padding(0)
-        };
-        dateFilterRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        dateFilterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        dateFilterRow.Controls.Add(Flow(CreateLabel("Geändert ab", Muted), fromDate,
-            CreateLabel("bis", Muted), untilDate), 0, 0);
         var resetFilters = CreateButton("Filter zurücksetzen");
-        resetFilters.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        resetFilters.Margin = fromDate.Margin;
-        // Gleiche den vertikalen Textversatz des flachen Buttons aus.
-        resetFilters.Padding = new Padding(8, 0, 8, 4);
         resetFilters.Click += (_, _) => ResetFilters();
-        void MatchDateFieldHeight()
-        {
-            var height = new Size(0, fromDate.Height);
-            resetFilters.MinimumSize = height;
-            resetFilters.MaximumSize = height;
-        }
-        fromDate.SizeChanged += (_, _) => MatchDateFieldHeight();
-        MatchDateFieldHeight();
-        dateFilterRow.Controls.Add(resetFilters, 1, 0);
-        inventoryLayout.Controls.Add(dateFilterRow, 0, 2);
+        inventoryLayout.Controls.Add(Flow(CreateLabel("Geändert ab", Muted), fromDate,
+            CreateLabel("bis", Muted), untilDate, resetFilters), 0, 2);
         inventoryLayout.Controls.Add(files, 0, 3);
         inventoryLayout.Controls.Add(fileCount, 0, 4);
         inventoryTab.Controls.Add(inventoryLayout);
@@ -179,6 +158,7 @@ internal sealed partial class InventoryForm : Form
         tabControl.TabPages.Add(storageTab);
         tabControl.TabPages.Add(BuildDuplicateTab());
         tabControl.TabPages.Add(BuildSortPlanTab());
+        tabControl.TabPages.Add(BuildFileRunTab());
 
         issueTab.Padding = new Padding(8);
         issueTab.Controls.Add(issues);
@@ -219,15 +199,17 @@ internal sealed partial class InventoryForm : Form
     {
         Shown += (_, _) =>
         {
+            LoadFileRuns();
             LoadSnapshot();
             LoadSortRules();
         };
         FormClosing += (_, args) =>
         {
-            if (scanning is null && duplicateRun is null)
+            if (scanning is null && duplicateRun is null && !fileRunBusy)
                 return;
             scanning?.Cancel();
             duplicateRun?.Cancel();
+            fileRunPause?.Cancel();
             args.Cancel = true;
             scanStatus.Text = "Die laufende Suche wird angehalten. Das Fenster kann danach geschlossen werden.";
         };
@@ -343,7 +325,7 @@ internal sealed partial class InventoryForm : Form
     private async Task ScanAsync()
     {
         var scanRoots = roots.Items.Cast<string>().ToArray();
-        if (scanRoots.Length == 0 || scanning is not null || duplicateRun is not null || !storeReadable)
+        if (scanRoots.Length == 0 || scanning is not null || duplicateRun is not null || fileRunBusy || !storeReadable)
             return;
 
         using var cancellation = new CancellationTokenSource();
@@ -560,7 +542,7 @@ internal sealed partial class InventoryForm : Form
 
     private void UpdateActions()
     {
-        bool idle = scanning is null && duplicateRun is null;
+        bool idle = scanning is null && duplicateRun is null && !fileRunBusy;
         addRoot.Enabled = idle;
         roots.Enabled = idle;
         removeRoot.Enabled = idle && roots.SelectedIndex >= 0;
@@ -569,6 +551,7 @@ internal sealed partial class InventoryForm : Form
         export.Enabled = visibleFiles.Count > 0;
         UpdateDuplicateActions();
         UpdateSortPlanActions();
+        UpdateFileRunActions();
     }
 
     private void ShowError(string heading, Exception error) => MessageBox.Show(this, $"{heading}\n\n{error.Message}",

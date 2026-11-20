@@ -19,6 +19,7 @@ internal sealed partial class InventoryForm
     private readonly TextBox planPattern = new() { Width = 120, PlaceholderText = "z. B. *.pdf" };
     private readonly ComboBox planRuleName = new() { Width = 220, DropDownStyle = ComboBoxStyle.DropDown };
     private readonly Button previewPlan = CreateButton("Vorschau erstellen", primary: true);
+    private readonly Button executePlan = CreateButton("Prüfen und ausführen …");
     private readonly Button excludeRows = CreateButton("Aus Plan ausschließen");
     private readonly Button includeRows = CreateButton("Wieder aufnehmen");
     private readonly Button changePlanFolder = CreateButton("Ziel ändern …");
@@ -78,7 +79,7 @@ internal sealed partial class InventoryForm
             if (planRuleName.SelectedIndex >= 0)
                 ApplyRule(savedRules[planRuleName.SelectedIndex]);
         };
-        layout.Controls.Add(Flow(CreateLabel("Sortierregel", Muted), planRuleName, saveRule, previewPlan), 0, 3);
+        layout.Controls.Add(Flow(CreateLabel("Sortierregel", Muted), planRuleName, saveRule, previewPlan, executePlan), 0, 3);
         layout.Controls.Add(Flow(excludeRows, includeRows, changePlanFolder), 0, 4);
 
         resolveAction.Items.AddRange(["Überspringen", "Ersetzen", "Beide behalten", "Präfix / Suffix"]);
@@ -107,6 +108,7 @@ internal sealed partial class InventoryForm
         resolveAction.SelectedIndexChanged += (_, _) => UpdateSortPlanActions();
         planGrid.SelectionChanged += (_, _) => UpdateSortPlanActions();
         previewPlan.Click += async (_, _) => await StartSortPreviewAsync();
+        executePlan.Click += async (_, _) => await ApprovePlanAsync();
         excludeRows.Click += async (_, _) => await ChangePlanRowsAsync(SelectedPlanRows(), choice => choice with { Excluded = true });
         includeRows.Click += async (_, _) => await ChangePlanRowsAsync(SelectedPlanRows(), choice => choice with
         {
@@ -193,7 +195,8 @@ internal sealed partial class InventoryForm
                 .OrderBy(row => row.Index).Select(row => visibleFiles[row.Index]),
             _ => allFiles
         };
-        FileEntry[] entries = source.Where(IsPresent).Select(row => row.File)
+        HashSet<string> artifacts = CurrentRunArtifacts();
+        FileEntry[] entries = source.Where(row => IsPresent(row) && !artifacts.Contains(row.File.Path)).Select(row => row.File)
             .DistinctBy(file => file.Path, InventoryPaths.Comparer)
             .OrderBy(file => file.Path, InventoryPaths.Comparer).ToArray();
         if (entries.Length == 0)
@@ -329,9 +332,10 @@ internal sealed partial class InventoryForm
 
     private void UpdateSortPlanActions()
     {
-        bool usable = !buildingPlan && activePlan is not null;
+        bool usable = !buildingPlan && !fileRunBusy && activePlan is not null;
         PlanRow[] selected = usable ? SelectedPlanRows() : [];
-        previewPlan.Enabled = !buildingPlan && scanning is null && allFiles.Any(IsPresent);
+        previewPlan.Enabled = !buildingPlan && !fileRunBusy && scanning is null && allFiles.Any(IsPresent);
+        executePlan.Enabled = usable && scanning is null && duplicateRun is null && planRows.Any(row => !row.Excluded);
         changePlanFolder.Enabled = selected.Any(row => !row.Excluded);
         excludeRows.Enabled = selected.Any(row => !row.Excluded);
         includeRows.Enabled = selected.Any(row => row.Excluded);

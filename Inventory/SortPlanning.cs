@@ -15,7 +15,8 @@ internal sealed record SortRule(string Name, SortCriteria Criteria, SortDate Dat
 internal sealed record PlanChoice(bool Excluded = false, string? Folder = null,
     CollisionAction Collision = CollisionAction.Pending, string Prefix = "", string Suffix = "");
 internal sealed record PlanRow(FileEntry Source, string Target, string Group, string Action,
-    string Details, bool Blocked = false, bool Collision = false, bool Excluded = false);
+    string Details, bool Blocked = false, bool Collision = false, bool Excluded = false, bool Replace = false,
+    WindowsFileStamp? Replacement = null);
 
 [JsonSerializable(typeof(SortRule[]))]
 internal partial class SortRulesJson : JsonSerializerContext;
@@ -132,8 +133,12 @@ internal static partial class SortPlanning
             case CollisionAction.Skip:
                 return new PlanRow(file, target, family, "Übersprungen", reason, Collision: true, Excluded: true);
             case CollisionAction.Replace when !planned && !directory && !reparse:
+                WindowsFileStamp replacement = WindowsFileOperations.Probe(target)
+                    ?? throw new IOException("Die Zieldatei hat sich während der Vorschau geändert.");
                 claimed.Add(target);
-                return new PlanRow(file, target, family, $"{action} · Ersetzen", reason, Collision: true);
+                return new PlanRow(file, target, family, $"{action} · Ersetzen",
+                    $"Zieldatei vorhanden · {InventoryLabels.Size(replacement.Bytes)} · geändert {DateTime.FromFileTimeUtc(replacement.Written).ToLocalTime():g}",
+                    Collision: true, Replace: true, Replacement: replacement);
             case CollisionAction.KeepBoth:
             case CollisionAction.Affixes:
                 string stem = Path.GetFileNameWithoutExtension(file.Name);

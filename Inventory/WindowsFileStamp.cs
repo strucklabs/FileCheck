@@ -6,13 +6,17 @@ namespace FilesizeChecker.Inventory;
 internal readonly record struct FileIdentity(ulong Volume, ulong IdLow, ulong IdHigh);
 
 internal sealed record WindowsFileStamp(FileIdentity Identity, long Bytes, long Created, long Written,
-    long Changed, uint Links)
+    long Changed, uint Links, FileAttributes Attributes)
 {
     public bool CanCache => Changed > 0;
 
     public static WindowsFileStamp? Read(FileStream stream)
     {
-        SafeFileHandle handle = stream.SafeFileHandle;
+        return Read(stream.SafeFileHandle);
+    }
+
+    public static WindowsFileStamp? Read(SafeFileHandle handle)
+    {
         if (!GetIdentity(handle, InformationClass.Id, out NativeIdentity identity, (uint)Marshal.SizeOf<NativeIdentity>())
             || (identity.Low == 0 && identity.High == 0)
             || !GetBasic(handle, InformationClass.Basic, out BasicInfo basic, (uint)Marshal.SizeOf<BasicInfo>())
@@ -20,7 +24,8 @@ internal sealed record WindowsFileStamp(FileIdentity Identity, long Bytes, long 
             return null;
 
         return new WindowsFileStamp(new FileIdentity(identity.Volume, identity.Low, identity.High),
-            standard.EndOfFile, basic.CreationTime, basic.LastWriteTime, basic.ChangeTime, standard.NumberOfLinks);
+            standard.EndOfFile, basic.CreationTime, basic.LastWriteTime, basic.ChangeTime, standard.NumberOfLinks,
+            (FileAttributes)basic.FileAttributes);
     }
 
     private enum InformationClass { Basic = 0, Standard = 1, Id = 18 }

@@ -54,7 +54,7 @@ internal sealed class DuplicateSearch(string cachePath)
                     using FileStream stream = Open(file, out WindowsFileStamp? stamp);
                     string hash;
                     if (!force && stamp?.CanCache == true && cache.TryGetValue(file.Path, out CachedHash? cached)
-                        && cached.Stamp == stamp)
+                        && cached.Stamp is { } cachedStamp && (cachedStamp with { Attributes = stamp.Attributes }) == stamp)
                     {
                         hash = cached.Hash;
                         reused++;

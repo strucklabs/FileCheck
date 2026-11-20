@@ -60,7 +60,9 @@ internal sealed partial class InventoryForm
 
     private void RefreshDuplicateSource()
     {
-        duplicateCandidates = DuplicateSearch.FindCandidates(allFiles.Where(IsPresent).Select(row => row.File));
+        HashSet<string> artifacts = CurrentRunArtifacts();
+        duplicateCandidates = DuplicateSearch.FindCandidates(allFiles
+            .Where(row => IsPresent(row) && !artifacts.Contains(row.File.Path)).Select(row => row.File));
         duplicateGrid.Rows.Clear();
         duplicateIssues.Rows.Clear();
         duplicateIssueTab.Text = "Prüfhinweise";
@@ -72,7 +74,7 @@ internal sealed partial class InventoryForm
 
     private void UpdateDuplicateActions()
     {
-        bool idle = scanning is null && duplicateRun is null;
+        bool idle = scanning is null && duplicateRun is null && !fileRunBusy;
         startDuplicates.Enabled = idle && duplicateCandidates.Length > 0;
         rebuildHashes.Enabled = idle;
         pauseDuplicates.Enabled = duplicateRun?.IsCancellationRequested == false;
@@ -80,7 +82,7 @@ internal sealed partial class InventoryForm
 
     private async Task SearchDuplicatesAsync()
     {
-        if (scanning is not null || duplicateRun is not null || duplicateCandidates.Length == 0)
+        if (scanning is not null || duplicateRun is not null || fileRunBusy || duplicateCandidates.Length == 0)
             return;
 
         using var cancellation = new CancellationTokenSource();
