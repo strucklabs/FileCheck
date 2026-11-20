@@ -128,7 +128,8 @@ internal sealed class InventoryForm : Form
         var resetFilters = CreateButton("Filter zurücksetzen");
         resetFilters.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         resetFilters.Margin = fromDate.Margin;
-        resetFilters.Padding = new Padding(8, 0, 8, 0);
+        // Gleiche den vertikalen Textversatz des flachen Buttons aus.
+        resetFilters.Padding = new Padding(8, 0, 8, 4);
         resetFilters.Click += (_, _) => ResetFilters();
         void MatchDateFieldHeight()
         {
