@@ -116,10 +116,30 @@ internal sealed class InventoryForm : Form
         inventoryLayout.Controls.Add(Flow(statusFilters), 0, 0);
         inventoryLayout.Controls.Add(Flow(nameFilter, folderFilter, extensionFilter,
             CreateLabel("Min. MiB", Muted), minSize, CreateLabel("Max. MiB (0 = alle)", Muted), maxSize), 0, 1);
+        var dateFilterRow = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 2, RowCount = 1, Margin = new Padding(0)
+        };
+        dateFilterRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        dateFilterRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        dateFilterRow.Controls.Add(Flow(CreateLabel("Geändert ab", Muted), fromDate,
+            CreateLabel("bis", Muted), untilDate), 0, 0);
         var resetFilters = CreateButton("Filter zurücksetzen");
+        resetFilters.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        resetFilters.Margin = fromDate.Margin;
+        resetFilters.Padding = new Padding(8, 0, 8, 0);
         resetFilters.Click += (_, _) => ResetFilters();
-        inventoryLayout.Controls.Add(Flow(CreateLabel("Geändert ab", Muted), fromDate,
-            CreateLabel("bis", Muted), untilDate, resetFilters), 0, 2);
+        void MatchDateFieldHeight()
+        {
+            var height = new Size(0, fromDate.Height);
+            resetFilters.MinimumSize = height;
+            resetFilters.MaximumSize = height;
+        }
+        fromDate.SizeChanged += (_, _) => MatchDateFieldHeight();
+        MatchDateFieldHeight();
+        dateFilterRow.Controls.Add(resetFilters, 1, 0);
+        inventoryLayout.Controls.Add(dateFilterRow, 0, 2);
         inventoryLayout.Controls.Add(files, 0, 3);
         inventoryLayout.Controls.Add(fileCount, 0, 4);
         inventoryTab.Controls.Add(inventoryLayout);
