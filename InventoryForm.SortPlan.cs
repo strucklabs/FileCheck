@@ -5,6 +5,7 @@ namespace FilesizeChecker;
 
 internal sealed partial class InventoryForm
 {
+    private readonly TabPage sortPlanTab = new("Sortierplan") { BackColor = Color.White };
     private readonly TextBox planDestination = new() { Width = 400, PlaceholderText = "Absoluter Zielordner" };
     private readonly ComboBox planScope = CreateDropdown(192);
     private readonly ComboBox planMode = CreateDropdown(112);
@@ -37,11 +38,11 @@ internal sealed partial class InventoryForm
     private SortPlanInput? activePlan;
     private bool buildingPlan;
 
-    private sealed record SortPlanInput(FileEntry[] Files, string Destination, SortRule Rule, bool Move);
+    private sealed record SortPlanInput(FileEntry[] Files, string Destination, SortRule Rule, bool Move,
+        Dictionary<string, string>? CollectionEvidence);
 
     private TabPage BuildSortPlanTab()
     {
-        var tab = new TabPage("Sortierplan") { BackColor = Color.White };
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 8, Padding = new Padding(10, 7, 10, 5)
@@ -51,7 +52,7 @@ internal sealed partial class InventoryForm
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        planScope.Items.AddRange(["Gesamtes Inventar", "Gefiltertes Inventar", "Markierte Inventarzeilen"]);
+        planScope.Items.AddRange(["Gesamtes Inventar", "Gefiltertes Inventar", "Markierte Inventarzeilen", "Gesammelte Dateien"]);
         planScope.SelectedIndex = 0;
         planMode.Items.AddRange(["Kopieren", "Verschieben"]);
         planMode.SelectedIndex = 0;
@@ -93,10 +94,12 @@ internal sealed partial class InventoryForm
         AddColumn(planGrid, "Gruppe", 105);
         AddColumn(planGrid, "Geplante Aktion", 139);
         AddColumn(planGrid, "Hinweis", 150, fill: true);
+        AddColumn(planGrid, "Herkunft und Befunde", 165, fill: true);
+        planGrid.Columns[6].Visible = false;
         layout.Controls.Add(planGrid, 0, 6);
         planStatus.MaximumSize = new Size(950, 0);
         layout.Controls.Add(planStatus, 0, 7);
-        tab.Controls.Add(layout);
+        sortPlanTab.Controls.Add(layout);
 
         planDestination.TextChanged += (_, _) => ClearSortPlan();
         planScope.SelectedIndexChanged += (_, _) => ClearSortPlan();
@@ -120,7 +123,7 @@ internal sealed partial class InventoryForm
         changePlanFolder.Click += async (_, _) => await SetPlanFolderAsync();
         resolveSelected.Click += async (_, _) => await ResolveConflictsAsync(SelectedPlanRows());
         resolveAll.Click += async (_, _) => await ResolveConflictsAsync(planRows);
-        return tab;
+        return sortPlanTab;
     }
 
     private static CheckBox CreateCriterion(string text, SortCriteria criterion) => new()
@@ -192,15 +195,20 @@ internal sealed partial class InventoryForm
 
     private Task StartSortPreviewAsync()
     {
-        IEnumerable<FileResult> source = planScope.SelectedIndex switch
+        if (planScope.SelectedIndex == CollectedPlanScope && importingExplorerFiles)
+            return Task.CompletedTask;
+        IEnumerable<FileResult> inventorySource = planScope.SelectedIndex switch
         {
             1 => visibleFiles,
             2 => files.SelectedRows.Cast<DataGridViewRow>().Where(row => row.Index < visibleFiles.Count)
                 .OrderBy(row => row.Index).Select(row => visibleFiles[row.Index]),
             _ => allFiles
         };
+        CollectedFile[]? collection = planScope.SelectedIndex == CollectedPlanScope ? collectedFiles.Items.ToArray() : null;
+        IEnumerable<FileEntry> source = collection is null ? inventorySource.Where(IsPresent).Select(row => row.File)
+            : collection.Select(entry => entry.File);
         HashSet<string> artifacts = CurrentRunArtifacts();
-        FileEntry[] entries = source.Where(row => IsPresent(row) && !artifacts.Contains(row.File.Path)).Select(row => row.File)
+        FileEntry[] entries = source.Where(file => !artifacts.Contains(file.Path))
             .DistinctBy(file => file.Path, InventoryPaths.Comparer)
             .OrderBy(file => file.Path, InventoryPaths.Comparer).ToArray();
         if (entries.Length == 0)
@@ -209,7 +217,8 @@ internal sealed partial class InventoryForm
             return Task.CompletedTask;
         }
         planChoices.Clear();
-        activePlan = new SortPlanInput(entries, planDestination.Text.Trim(), CurrentRule(), planMode.SelectedIndex == 1);
+        var evidence = collection?.ToDictionary(entry => entry.File.Path, entry => entry.Summary, InventoryPaths.Comparer);
+        activePlan = new SortPlanInput(entries, planDestination.Text.Trim(), CurrentRule(), planMode.SelectedIndex == 1, evidence);
         return RefreshSortPreviewAsync();
     }
 
@@ -231,16 +240,19 @@ internal sealed partial class InventoryForm
                 return;
             planRows = result;
             planGrid.Rows.Clear();
+            planGrid.Columns[6].Visible = request.CollectionEvidence is not null;
             foreach (PlanRow row in result)
             {
+                string evidence = request.CollectionEvidence?.GetValueOrDefault(row.Source.Path) ?? "";
                 int index = planGrid.Rows.Add(row.Source.Name, Path.GetFileName(row.Target), Path.GetDirectoryName(row.Target) ?? "",
-                    row.Group, row.Action, row.Details);
+                    row.Group, row.Action, row.Details, evidence);
                 DataGridViewRow item = planGrid.Rows[index];
                 item.Tag = row;
                 item.Cells[0].ToolTipText = $"{row.Source.Path}\n{InventoryLabels.Size(row.Source.Bytes)} · geändert {row.Source.ModifiedUtc.ToLocalTime():g}";
                 item.Cells[1].ToolTipText = row.Target;
                 item.Cells[2].ToolTipText = row.Target;
                 item.Cells[5].ToolTipText = row.Details;
+                item.Cells[6].ToolTipText = evidence;
                 if (row.Blocked)
                     item.Cells[4].Style.ForeColor = Color.Maroon;
             }
@@ -330,6 +342,7 @@ internal sealed partial class InventoryForm
         planChoices.Clear();
         planRows = [];
         planGrid.Rows.Clear();
+        planGrid.Columns[6].Visible = planScope.SelectedIndex == CollectedPlanScope;
         planStatus.Text = "Wähle Ziel und Sortierkriterien für die Vorschau.";
         UpdateSortPlanActions();
     }
@@ -338,7 +351,9 @@ internal sealed partial class InventoryForm
     {
         bool usable = !buildingPlan && !fileRunBusy && activePlan is not null;
         PlanRow[] selected = usable ? SelectedPlanRows() : [];
-        previewPlan.Enabled = !buildingPlan && !fileRunBusy && scanning is null && allFiles.Any(IsPresent);
+        bool hasSource = planScope.SelectedIndex == CollectedPlanScope
+            ? collectedFiles.Count > 0 && !importingExplorerFiles : allFiles.Any(IsPresent);
+        previewPlan.Enabled = !buildingPlan && !fileRunBusy && scanning is null && hasSource;
         executePlan.Enabled = usable && scanning is null && duplicateRun is null && nameRun is null && planRows.Any(row => !row.Excluded);
         changePlanFolder.Enabled = selected.Any(row => !row.Excluded);
         excludeRows.Enabled = selected.Any(row => !row.Excluded);

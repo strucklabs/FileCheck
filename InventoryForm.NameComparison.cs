@@ -10,8 +10,8 @@ internal sealed partial class InventoryForm
     private readonly Button readFamilyVersions = CreateButton("Versionen der Gruppe prüfen");
     private readonly Button compareNameSelection = CreateButton("Markierte prüfen / vergleichen");
     private readonly Button openVersionFiles = CreateButton("Dateien wählen …");
-    private readonly DataGridView nameFamilies = CreateGrid();
-    private readonly DataGridView nameMembers = CreateGrid();
+    private readonly FileDragGrid nameFamilies = CreateGrid();
+    private readonly FileDragGrid nameMembers = CreateGrid();
     private readonly Label namesStatus = CreateLabel("Suche im Inventar nach Varianten eines Dateinamens.", Muted);
     private readonly Label familyStatus = CreateLabel("Wähle eine Namensgruppe.", Muted);
     private readonly Dictionary<string, VersionReport> familyVersions = new(InventoryPaths.Comparer);
@@ -159,7 +159,7 @@ internal sealed partial class InventoryForm
         {
             int index = nameFamilies.Rows.Add(family.Name, family.Members.Count.ToString("N0"));
             nameFamilies.Rows[index].Tag = family;
-            nameFamilies.Rows[index].Cells[0].ToolTipText = family.Name;
+            nameFamilies.Rows[index].Cells[0].ToolTipText = $"{family.Name}\nZiehe die Gruppe, um alle Dateien zu sammeln.";
         }
         if (nameFamilies.Rows.Count > 0)
             nameFamilies.CurrentCell = nameFamilies.Rows[0].Cells[0];

@@ -9,7 +9,7 @@ internal sealed partial class InventoryForm
     private readonly CheckBox rebuildHashes = new() { Text = "Alle Prüfwerte neu berechnen", AutoSize = true, Margin = new Padding(10, 6, 8, 3) };
     private readonly Label duplicateStatus = CreateLabel("Für die Suche zuerst einen Ordner scannen.", Muted);
     private readonly ProgressBar duplicateProgress = new() { Width = 170, Height = 19, Margin = new Padding(3, 6, 8, 3) };
-    private readonly DataGridView duplicateGrid = CreateGrid();
+    private readonly FileDragGrid duplicateGrid = CreateGrid();
     private readonly DataGridView duplicateIssues = CreateGrid();
     private readonly TabPage duplicateIssueTab = new("Prüfhinweise");
     private FileEntry[] duplicateCandidates = [];
@@ -142,6 +142,8 @@ internal sealed partial class InventoryForm
                     : member.Stamp.Links > 1 ? $"Hardlink ({member.Stamp.Links:N0} Pfade)" : "";
                 int item = duplicateGrid.Rows.Add($"{index + 1:N0}", member.File.Name, member.File.Folder, InventoryLabels.Size(member.File.Bytes),
                     row == 0 ? InventoryLabels.Size(group.ReclaimableBytes) : "", label);
+                duplicateGrid.Rows[item].Tag = new CollectedDuplicate(group, member, index + 1);
+                duplicateGrid.Rows[item].Cells[0].ToolTipText = "Ziehe die Gruppennummer, um alle Dateien der Gruppe zu sammeln.";
                 duplicateGrid.Rows[item].Cells[2].ToolTipText = member.File.Path;
             }
         }

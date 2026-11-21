@@ -27,7 +27,7 @@ internal sealed partial class InventoryForm : Form
     private readonly NumericUpDown maxSize = CreateSizeFilter();
     private readonly DateTimePicker fromDate = CreateDateFilter();
     private readonly DateTimePicker untilDate = CreateDateFilter();
-    private readonly DataGridView files = CreateGrid(virtualMode: true);
+    private readonly FileDragGrid files = CreateGrid(virtualMode: true);
     private readonly DataGridView byType = CreateGrid();
     private readonly DataGridView byFolder = CreateGrid();
     private readonly DataGridView issues = CreateGrid();
@@ -65,10 +65,11 @@ internal sealed partial class InventoryForm : Form
 
     private void BuildLayout()
     {
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 73));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         Controls.Add(layout);
 
@@ -165,13 +166,14 @@ internal sealed partial class InventoryForm : Form
         issueTab.Controls.Add(issues);
         tabControl.TabPages.Add(issueTab);
         layout.Controls.Add(tabControl, 0, 2);
+        layout.Controls.Add(BuildCollectionBar(), 0, 3);
 
         scanStatus.AutoSize = false;
         scanStatus.AutoEllipsis = true;
         scanStatus.Dock = DockStyle.Fill;
         scanStatus.Height = 24;
         scanStatus.Margin = new Padding(20, 2, 20, 3);
-        layout.Controls.Add(scanStatus, 0, 3);
+        layout.Controls.Add(scanStatus, 0, 4);
     }
 
     private void ConfigureGrids()
@@ -198,6 +200,7 @@ internal sealed partial class InventoryForm : Form
 
     private void WireEvents()
     {
+        WireCollectionSources();
         Shown += (_, _) =>
         {
             LoadFileRuns();
@@ -556,6 +559,7 @@ internal sealed partial class InventoryForm : Form
         UpdateSortPlanActions();
         UpdateFileRunActions();
         UpdateNameActions();
+        UpdateCollectionActions();
     }
 
     private void ShowError(string heading, Exception error) => MessageBox.Show(this, $"{heading}\n\n{error.Message}",
@@ -649,7 +653,7 @@ internal sealed partial class InventoryForm : Form
         Format = DateTimePickerFormat.Short, ShowCheckBox = true, Checked = false, Width = 126
     };
 
-    private static DataGridView CreateGrid(bool virtualMode = false) => new()
+    private static FileDragGrid CreateGrid(bool virtualMode = false) => new()
     {
         Dock = DockStyle.Fill, AutoGenerateColumns = false, VirtualMode = virtualMode, ReadOnly = true,
         AllowUserToAddRows = false, AllowUserToDeleteRows = false, AllowUserToResizeRows = false,

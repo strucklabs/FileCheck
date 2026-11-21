@@ -22,6 +22,10 @@ Der Filesize-Checker ist ein lokales Windows-Tool der CheckTools-Reihe. Er erfas
 - Einfache Namensähnlichkeit ist bereits in Version 1 ein Sortierkriterium. Das Tool erkennt übliche Trennzeichen und eindeutige Kopier- oder Versionszusätze. Es schlägt beispielsweise für `Modell.safetensors`, `Modell (1).safetensors` und `Modell_v2.safetensors` einen gemeinsamen Zielordner vor. Der Sortierplan zeigt den erkannten Bezug. Dateien lassen sich einzeln aus der Gruppe nehmen und Zielordner ändern.
 - Standardansichten sind **Inventar**, **Duplikate** und **Sortierplan**. Der Sortierplan zeigt für jede Datei Quelle, endgültiges Ziel und die geplante Aktion. Die Ausführung beginnt nach Freigabe des Plans.
 
+### Dateien für den Sortierplan sammeln
+
+Eine feste Ablage unter den Ergebnislisten nimmt markierte Dateizeilen, vollständige Duplikat- oder Namensgruppen und Dateien aus dem Windows-Explorer an. Mehrfach hinzugefügte Pfade erscheinen einmal mit ihren jeweiligen Befunden. In der Sammlung lassen sich Einträge entfernen, bevor sie als eigener Quellbereich in den Sortierplan übernommen werden. Das Ablegen und Übernehmen sammelt Verweise. Dateiaktionen erfolgen erst über die Vorschau, Vorabprüfung und Freigabe des Plans.
+
 ### Namenskollisionen
 
 Die Vorschau erkennt vorhandene Zieldateien und Kollisionen zwischen Einträgen desselben Plans. Sie zeigt für Quelle und Ziel Pfad, Größe und Änderungsdatum. Die Aktionen gelten je Konflikt oder für alle ausgewählten Konflikte.
