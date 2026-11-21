@@ -6,7 +6,7 @@ Entwickle den Filesize-Checker als lokales Windows-Tool der CheckTools-Reihe. De
 
 - Verwende C# mit .NET 10 und Windows Forms wie bei WinCheck. Halte Inventar, Dateivergleiche, Sortierregeln und Ausführung unabhängig von der Oberfläche. Scans und Inhaltsprüfungen laufen im Hintergrund und melden Fortschritt. Speichere Inventare, Prüfdaten und Regeln lokal.
 - Implementiere zuerst Inventar, Speicheranalyse und den Vergleich mit dem letzten erfolgreichen Scan. Stelle **Neu**, **Fehlend** und **Verändert** als kombinierbare Filter mit Trefferzahlen bereit. Behalte bei einem unvollständigen Scan den letzten erfolgreichen Stand der betroffenen Bereiche bei. Weise aus, ob ein Befund auf Metadaten oder einer Inhaltsprüfung beruht.
-- Ermittle exakte Kopien anhand von Dateigröße, SHA-256 und anschließendem Bytevergleich. Behandle gespeicherte Prüfwerte als wiederverwendbare Zwischenergebnisse. Ermögliche eine vollständige Neuberechnung und verwerfe Prüfergebnisse für Dateien, die sich während der Prüfung ändern. Berücksichtige Hardlinks bei der Berechnung des potenziell freigebbaren Speichers.
+- Ermittle exakte Kopien anhand von Dateigröße, SHA-256 und anschließendem Bytevergleich. Filtere große Dateien mit unterschiedlichen Stichproben vor der vollständigen Prüfung aus. Verwende gespeicherte Stichproben, SHA-256-Prüfwerte und bestätigte Bytevergleiche nur bei unveränderten Dateien wieder. Ermögliche eine vollständige Neuberechnung und verwerfe Prüfergebnisse für Dateien, die sich während der Prüfung ändern. Berücksichtige Hardlinks bei der Berechnung des potenziell freigebbaren Speichers.
 - Implementiere einfache Namensähnlichkeit bereits in Version 1. Bilde nachvollziehbare Gruppen anhand erkennbarer Kopier- und Versionszusätze. Schlage dafür Zielordner vor und lass Nutzer die Gruppenzugehörigkeit für den jeweiligen Plan bearbeiten. Die weiteren Vergleichsverfahren richten sich nach den Ausbaustufen im Funktionsplan.
 
 ## Dateivorgänge
@@ -21,5 +21,11 @@ Entwickle den Filesize-Checker als lokales Windows-Tool der CheckTools-Reihe. De
 
 ## Verifikation
 
-- Verwende `<Testordner>` als lesenden Praxistest für Scan, Speicheranalyse, Duplikatsuche und Sortiervorschau. Führe Kopieren, Umbenennen, Ersetzen und Verschieben mit einem separaten kontrollierten Testbestand aus.
+- Verwende für den lesenden Praxistest einen separat ausgewählten Ordner. Gibt es eine ignorierte `AGENTS.local.md`, verwende die dort festgelegte Testquelle. Führe Kopieren, Umbenennen, Ersetzen und Verschieben mit einem separaten kontrollierten Testbestand aus.
 - Prüfe die Abnahmekriterien des Funktionsplans beim jeweiligen Entwicklungsschritt. Decke dabei Scan-Ausfälle, gleich große Dateien mit unterschiedlichem Inhalt, Hardlinks, Namensfamilien und Konflikte im selben Sortierplan ab. Gib bei der Übergabe an, welche Fälle tatsächlich geprüft wurden.
+
+## Dokumentation und Datenschutz
+
+- Aktualisiere `README.md` bei relevanten Änderungen an Funktionen, Bedienung, Entwicklungsstatus, Voraussetzungen, Build, Tests, Datenhaltung oder Lizenzen.
+- Prüfe vor jedem Commit neue und geänderte Dateien sowie den Staging-Bereich auf personenbezogene Daten, Zugangsdaten und private Ergebnisdateien. Prüfe auch sichtbare Inhalte und Metadaten von Testdaten, Dokumenten, Bildern, Archiven und Binärdateien. Verwende in Git ausschließlich synthetische Beispiele und erhalte Lizenz- und Urhebervermerke.
+- Speichere private Prüfpfade, Notizen, Inventare, Exporte, Prüfdaten und Build-Ausgaben lokal außerhalb der versionierten Dateien oder unter einem dafür vorgesehenen ignorierten Pfad. Prüfe Veröffentlichungspakete vor der Weitergabe separat.

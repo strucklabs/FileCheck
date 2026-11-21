@@ -33,12 +33,18 @@ internal sealed partial class InventoryForm : Form
     private readonly DataGridView issues = CreateGrid();
     private readonly Label scanStatus = CreateLabel("Ordner auswählen, um das Inventar zu erstellen.", Muted);
     private readonly Label storageSummary = CreateLabel("0 Dateien · 0 B", Ink);
+    private readonly Label inventoryFilterStatus = new()
+    {
+        AutoSize = true, Dock = DockStyle.Fill, Text = "Keine Filter aktiv", ForeColor = Accent,
+        TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8, 6, 8, 6), Margin = new Padding(0)
+    };
     private readonly Label fileCount = CreateLabel("0 Treffer", Muted);
     private readonly TabPage issueTab = new("Scan-Hinweise");
 
     private InventorySnapshot? snapshot;
     private List<FileResult> allFiles = [];
     private List<FileResult> visibleFiles = [];
+    private StorageSelection? inventoryStorageSelection;
     private CancellationTokenSource? scanning;
     private bool refreshingFilters;
     private bool storeReadable = true;
@@ -107,8 +113,9 @@ internal sealed partial class InventoryForm : Form
         var inventoryTab = new TabPage("Inventar") { BackColor = Color.White };
         var inventoryLayout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(10, 7, 10, 4)
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(10, 7, 10, 4)
         };
+        inventoryLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         inventoryLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         inventoryLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         inventoryLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -119,10 +126,26 @@ internal sealed partial class InventoryForm : Form
             CreateLabel("Min. MiB", Muted), minSize, CreateLabel("Max. MiB (0 = alle)", Muted), maxSize), 0, 1);
         var resetFilters = CreateButton("Filter zurücksetzen");
         resetFilters.Click += (_, _) => ResetFilters();
+        resetFilters.Anchor = AnchorStyles.Right;
         inventoryLayout.Controls.Add(Flow(CreateLabel("Geändert ab", Muted), fromDate,
-            CreateLabel("bis", Muted), untilDate, resetFilters), 0, 2);
-        inventoryLayout.Controls.Add(files, 0, 3);
-        inventoryLayout.Controls.Add(fileCount, 0, 4);
+            CreateLabel("bis", Muted), untilDate), 0, 2);
+        var filterBar = new TableLayoutPanel
+        {
+            AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Fill,
+            ColumnCount = 2, RowCount = 1, BackColor = DropIdle, Margin = new Padding(3, 2, 3, 5)
+        };
+        filterBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        filterBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        filterBar.Controls.Add(inventoryFilterStatus, 0, 0);
+        filterBar.Controls.Add(resetFilters, 1, 0);
+        filterBar.SizeChanged += (_, _) =>
+        {
+            int availableWidth = filterBar.ClientSize.Width - resetFilters.PreferredSize.Width - resetFilters.Margin.Horizontal;
+            inventoryFilterStatus.MaximumSize = new Size(Math.Max(1, availableWidth), 0);
+        };
+        inventoryLayout.Controls.Add(filterBar, 0, 3);
+        inventoryLayout.Controls.Add(files, 0, 4);
+        inventoryLayout.Controls.Add(fileCount, 0, 5);
         inventoryTab.Controls.Add(inventoryLayout);
         tabControl.TabPages.Add(inventoryTab);
 
@@ -143,14 +166,9 @@ internal sealed partial class InventoryForm : Form
         breakdownFilter.SelectedIndex = 0;
         breakdownFilter.SelectedIndexChanged += (_, _) => RefreshStorageBreakdown(breakdownFilter.SelectedIndex == 1);
         var largestFiles = CreateButton("Größte Dateien anzeigen");
-        largestFiles.Click += (_, _) =>
-        {
-            ResetFilters();
-            statusFilters.Single(filter => (FileStatus)filter.Tag! == FileStatus.Missing).Checked = false;
-            statusFilters.Single(filter => (FileStatus)filter.Tag! == FileStatus.Unavailable).Checked = false;
-            SetSort(4, false);
-            tabControl.SelectedTab = inventoryTab;
-        };
+        largestFiles.Click += (_, _) => OpenStorageInventory(inventoryTab, new StorageSelection(StorageGroup.All, "Größte Dateien"));
+        WireStorageGrid(byType, inventoryTab);
+        WireStorageGrid(byFolder, inventoryTab);
         storageLayout.Controls.Add(Flow(breakdownFilter), 0, 1);
         storageLayout.Controls.Add(Flow(CreateLabel("Größte Ordner einschließlich Unterordnern", Muted), largestFiles), 1, 1);
         storageLayout.Controls.Add(byType, 0, 2);
@@ -159,6 +177,7 @@ internal sealed partial class InventoryForm : Form
         tabControl.TabPages.Add(storageTab);
         tabControl.TabPages.Add(BuildDuplicateTab());
         tabControl.TabPages.Add(BuildNameComparisonTab());
+        tabControl.TabPages.Add(BuildImageComparisonTab());
         tabControl.TabPages.Add(BuildSortPlanTab());
         tabControl.TabPages.Add(BuildFileRunTab());
 
@@ -209,11 +228,12 @@ internal sealed partial class InventoryForm : Form
         };
         FormClosing += (_, args) =>
         {
-            if (scanning is null && duplicateRun is null && nameRun is null && !fileRunBusy)
+            if (scanning is null && duplicateRun is null && nameRun is null && imageRun is null && !fileRunBusy)
                 return;
             scanning?.Cancel();
             duplicateRun?.Cancel();
             nameRun?.Cancel();
+            imageRun?.Cancel();
             fileRunPause?.Cancel();
             args.Cancel = true;
             scanStatus.Text = "Die laufende Suche wird angehalten. Das Fenster kann danach geschlossen werden.";
@@ -312,31 +332,49 @@ internal sealed partial class InventoryForm : Form
     {
         using var picker = new FolderBrowserDialog
         {
-            Description = "Ordner oder Laufwerk für das Inventar auswählen",
+            Description = "Scan-Ordner auswählen",
             UseDescriptionForTitle = true,
-            ShowNewFolderButton = false
+            ShowNewFolderButton = false,
+            Multiselect = true
         };
         if (picker.ShowDialog(this) != DialogResult.OK)
             return;
 
-        string selected = Path.TrimEndingDirectorySeparator(Path.GetFullPath(picker.SelectedPath));
-        foreach (string root in roots.Items.Cast<string>())
+        IReadOnlyList<string> skipped = AddScanRoots(picker.SelectedPaths);
+        if (skipped.Count > 0)
         {
-            if (InventoryPaths.IsWithin(selected, root) || InventoryPaths.IsWithin(root, selected))
-            {
-                MessageBox.Show(this, $"Der Scan-Ordner überschneidet sich mit {root}.", Text,
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
+            string details = string.Join(Environment.NewLine, skipped.Take(5));
+            if (skipped.Count > 5)
+                details += $"{Environment.NewLine}… und {skipped.Count - 5:N0} weitere";
+            MessageBox.Show(this, $"Diese Ordner sind bereits erfasst oder überschneiden sich mit einem Scan-Ordner:{Environment.NewLine}{Environment.NewLine}{details}",
+                Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
-        roots.SelectedIndex = roots.Items.Add(selected);
+    }
+
+    private IReadOnlyList<string> AddScanRoots(IEnumerable<string> paths)
+    {
+        var skipped = new List<string>();
+        int lastAdded = -1;
+        foreach (string path in paths)
+        {
+            string selected = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+            if (roots.Items.Cast<string>().Any(root => InventoryPaths.IsWithin(selected, root) || InventoryPaths.IsWithin(root, selected)))
+            {
+                skipped.Add(selected);
+                continue;
+            }
+            lastAdded = roots.Items.Add(selected);
+        }
+        if (lastAdded >= 0)
+            roots.SelectedIndex = lastAdded;
         UpdateActions();
+        return skipped;
     }
 
     private async Task ScanAsync()
     {
         var scanRoots = roots.Items.Cast<string>().ToArray();
-        if (scanRoots.Length == 0 || scanning is not null || duplicateRun is not null || nameRun is not null || fileRunBusy || !storeReadable)
+        if (scanRoots.Length == 0 || scanning is not null || duplicateRun is not null || nameRun is not null || imageRun is not null || fileRunBusy || !storeReadable)
             return;
 
         using var cancellation = new CancellationTokenSource();
@@ -410,6 +448,7 @@ internal sealed partial class InventoryForm : Form
         RefreshStorage();
         RefreshDuplicateSource();
         ClearNameComparison();
+        ClearImageResults();
         ClearSortPlan();
         UpdateActions();
     }
@@ -438,6 +477,7 @@ internal sealed partial class InventoryForm : Form
             FileEntry file = result.File;
             DateTime date = file.ModifiedUtc.ToLocalTime().Date;
             return (statuses.Count == 0 || statuses.Contains(result.Status))
+                && (inventoryStorageSelection is null || (IsPresent(result) && inventoryStorageSelection.Contains(file)))
                 && (text.Length == 0 || file.Path.Contains(text, StringComparison.OrdinalIgnoreCase))
                 && (folder is null || InventoryPaths.IsWithin(file.Folder, folder))
                 && (extension is null || InventoryPaths.Comparer.Equals(ExtensionLabel(file.Extension), extension))
@@ -449,12 +489,34 @@ internal sealed partial class InventoryForm : Form
         SortFiles();
         files.RowCount = visibleFiles.Count;
         files.Invalidate();
+        var activeFilters = new List<string>();
+        if (inventoryStorageSelection is not null)
+            activeFilters.Add($"Speicheranalyse: {inventoryStorageSelection.Description}");
+        if (statuses.Count > 0)
+            activeFilters.Add($"Status: {string.Join(", ", statuses.Select(InventoryLabels.Status))}");
+        if (text.Length > 0)
+            activeFilters.Add($"Name oder Pfad: „{text}“");
+        if (folder is not null)
+            activeFilters.Add($"Ordner: {folder}");
+        if (extension is not null)
+            activeFilters.Add($"Dateityp: {extension}");
+        if (min > 0)
+            activeFilters.Add($"Mindestens {minSize.Value:N2} MiB");
+        if (max > 0)
+            activeFilters.Add($"Höchstens {maxSize.Value:N2} MiB");
+        if (fromDate.Checked)
+            activeFilters.Add($"Geändert ab {fromDate.Value:d}");
+        if (untilDate.Checked)
+            activeFilters.Add($"Geändert bis {untilDate.Value:d}");
+
+        inventoryFilterStatus.Text = activeFilters.Count == 0 ? "Keine Filter aktiv" : $"Aktive Filter · {string.Join(" · ", activeFilters)}";
         fileCount.Text = $"{visibleFiles.Count:N0} von {allFiles.Count:N0} Einträgen";
         export.Enabled = visibleFiles.Count > 0;
     }
 
-    private void ResetFilters()
+    private void ResetFilters(StorageSelection? storageSelection = null)
     {
+        inventoryStorageSelection = storageSelection;
         refreshingFilters = true;
         foreach (CheckBox filter in statusFilters)
             filter.Checked = false;
@@ -519,7 +581,7 @@ internal sealed partial class InventoryForm : Form
             }
         }
 
-        FillStorageGrid(byFolder, folders.Values.OrderByDescending(row => row.Bytes).ThenBy(row => row.Group));
+        FillStorageGrid(byFolder, folders.Values.OrderByDescending(row => row.Bytes).ThenBy(row => row.Group), StorageGroup.Folder);
     }
 
     private void RefreshStorageBreakdown(bool sizes)
@@ -528,7 +590,7 @@ internal sealed partial class InventoryForm : Form
             .GroupBy(file => sizes ? InventoryLabels.SizeClass(file.Bytes) : ExtensionLabel(file.Extension), InventoryPaths.Comparer)
             .Select(group => new StorageRow(group.Key, group.Count(), group.Sum(file => file.Bytes)))
             .OrderByDescending(row => row.Bytes).ThenBy(row => row.Group);
-        FillStorageGrid(byType, groups);
+        FillStorageGrid(byType, groups, sizes ? StorageGroup.Size : StorageGroup.Type);
     }
 
     private void ExportCsv()
@@ -554,7 +616,7 @@ internal sealed partial class InventoryForm : Form
 
     private void UpdateActions()
     {
-        bool idle = scanning is null && duplicateRun is null && nameRun is null && !fileRunBusy;
+        bool idle = scanning is null && duplicateRun is null && nameRun is null && imageRun is null && !fileRunBusy;
         addRoot.Enabled = idle;
         roots.Enabled = idle;
         removeRoot.Enabled = idle && roots.SelectedIndex >= 0;
@@ -565,6 +627,7 @@ internal sealed partial class InventoryForm : Form
         UpdateSortPlanActions();
         UpdateFileRunActions();
         UpdateNameActions();
+        UpdateImageActions();
         UpdateCollectionActions();
     }
 
@@ -574,13 +637,6 @@ internal sealed partial class InventoryForm : Form
     private static bool IsPresent(FileResult result) => result.Status is not (FileStatus.Missing or FileStatus.Unavailable);
 
     private static string ExtensionLabel(string extension) => extension.Length == 0 ? "Ohne Endung" : extension.ToLowerInvariant();
-
-    private static void FillStorageGrid(DataGridView grid, IEnumerable<StorageRow> rows)
-    {
-        grid.Rows.Clear();
-        foreach (StorageRow row in rows)
-            grid.Rows.Add(row.Group, row.Count.ToString("N0"), InventoryLabels.Size(row.Bytes));
-    }
 
     private static void FillDropdown(ComboBox box, string first, IEnumerable<string> values)
     {
@@ -609,11 +665,13 @@ internal sealed partial class InventoryForm : Form
         Text = text, ForeColor = color, AutoSize = true, Margin = new Padding(2, 6, 8, 4)
     };
 
-    private static CheckBox CreateStatusFilter(FileStatus status)
+    private static CheckBox CreateStatusFilter(FileStatus status) => CreateFilterToggle("", status);
+
+    private static CheckBox CreateFilterToggle(string text, object tag)
     {
         var filter = new CheckBox
         {
-            Appearance = Appearance.Button, AutoSize = true, Tag = status,
+            Appearance = Appearance.Button, AutoSize = true, Text = text, Tag = tag,
             FlatStyle = FlatStyle.Flat, UseVisualStyleBackColor = false,
             MinimumSize = new Size(0, 30), Margin = new Padding(2, 2, 6, 4)
         };

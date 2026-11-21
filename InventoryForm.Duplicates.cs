@@ -6,30 +6,42 @@ internal sealed partial class InventoryForm
 {
     private readonly Button startDuplicates = CreateButton("Duplikatsuche starten", primary: true);
     private readonly Button pauseDuplicates = CreateButton("Pausieren");
+    private readonly Button cancelDuplicates = CreateButton("Abbrechen");
     private readonly CheckBox rebuildHashes = new() { Text = "Alle Prüfwerte neu berechnen", AutoSize = true, Margin = new Padding(10, 6, 8, 3) };
     private readonly Label duplicateStatus = CreateLabel("Für die Suche zuerst einen Ordner scannen.", Muted);
+    private readonly Label duplicatePath = CreateLabel("", Muted);
     private readonly ProgressBar duplicateProgress = new() { Width = 170, Height = 19, Margin = new Padding(3, 6, 8, 3) };
     private readonly FileDragGrid duplicateGrid = CreateGrid();
     private readonly DataGridView duplicateIssues = CreateGrid();
     private readonly TabPage duplicateIssueTab = new("Prüfhinweise");
     private FileEntry[] duplicateCandidates = [];
     private CancellationTokenSource? duplicateRun;
+    private bool duplicateAbortRequested;
 
     private TabPage BuildDuplicateTab()
     {
         var tab = new TabPage("Duplikate") { BackColor = Color.White };
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(10, 8, 10, 8)
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(10, 8, 10, 8)
         };
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 27));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 23));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.Controls.Add(Flow(startDuplicates, pauseDuplicates, rebuildHashes, duplicateProgress), 0, 0);
+        layout.Controls.Add(Flow(startDuplicates, pauseDuplicates, cancelDuplicates, rebuildHashes, duplicateProgress), 0, 0);
         duplicateStatus.AutoSize = false;
         duplicateStatus.AutoEllipsis = true;
+        duplicateStatus.Margin = new Padding(2, 0, 8, 0);
+        duplicateStatus.TextAlign = ContentAlignment.MiddleLeft;
         duplicateStatus.Dock = DockStyle.Fill;
         layout.Controls.Add(duplicateStatus, 0, 1);
+        duplicatePath.AutoSize = false;
+        duplicatePath.AutoEllipsis = true;
+        duplicatePath.Margin = new Padding(2, 0, 8, 0);
+        duplicatePath.TextAlign = ContentAlignment.MiddleLeft;
+        duplicatePath.Dock = DockStyle.Fill;
+        layout.Controls.Add(duplicatePath, 0, 2);
 
         AddColumn(duplicateGrid, "Gruppe ziehen", 113);
         AddColumn(duplicateGrid, "Dateiname", 220, fill: true);
@@ -45,16 +57,12 @@ internal sealed partial class InventoryForm
         var resultTabs = new TabControl { Dock = DockStyle.Fill };
         resultTabs.TabPages.Add(resultTab);
         resultTabs.TabPages.Add(duplicateIssueTab);
-        layout.Controls.Add(resultTabs, 0, 2);
+        layout.Controls.Add(resultTabs, 0, 3);
         tab.Controls.Add(layout);
 
         startDuplicates.Click += async (_, _) => await SearchDuplicatesAsync();
-        pauseDuplicates.Click += (_, _) =>
-        {
-            duplicateRun?.Cancel();
-            pauseDuplicates.Enabled = false;
-            duplicateStatus.Text = "Duplikatsuche wird pausiert …";
-        };
+        pauseDuplicates.Click += (_, _) => RequestDuplicateStop(abort: false);
+        cancelDuplicates.Click += (_, _) => RequestDuplicateStop(abort: true);
         return tab;
     }
 
@@ -67,6 +75,7 @@ internal sealed partial class InventoryForm
         duplicateIssues.Rows.Clear();
         duplicateIssueTab.Text = "Prüfhinweise";
         duplicateProgress.Value = 0;
+        duplicatePath.Text = "";
         startDuplicates.Text = "Duplikatsuche starten";
         duplicateStatus.Text = snapshot is null ? "Für die Suche zuerst einen Ordner scannen."
             : $"{duplicateCandidates.Length:N0} Dateien mit mindestens einem gleich großen Kandidaten.";
@@ -74,25 +83,38 @@ internal sealed partial class InventoryForm
 
     private void UpdateDuplicateActions()
     {
-        bool idle = scanning is null && duplicateRun is null && nameRun is null && !fileRunBusy;
+        bool idle = scanning is null && duplicateRun is null && nameRun is null && imageRun is null && !fileRunBusy;
         startDuplicates.Enabled = idle && duplicateCandidates.Length > 0;
         rebuildHashes.Enabled = idle;
         pauseDuplicates.Enabled = duplicateRun?.IsCancellationRequested == false;
+        cancelDuplicates.Enabled = pauseDuplicates.Enabled;
+    }
+
+    private void RequestDuplicateStop(bool abort)
+    {
+        duplicateAbortRequested = abort;
+        duplicateRun?.Cancel();
+        UpdateDuplicateActions();
+        duplicateStatus.Text = abort ? "Abbruch angefordert · Der laufende Lesezugriff wird beendet."
+            : "Pause angefordert · Der laufende Lesezugriff wird beendet.";
     }
 
     private async Task SearchDuplicatesAsync()
     {
-        if (scanning is not null || duplicateRun is not null || nameRun is not null || fileRunBusy || duplicateCandidates.Length == 0)
+        if (scanning is not null || duplicateRun is not null || nameRun is not null || imageRun is not null || fileRunBusy || duplicateCandidates.Length == 0)
             return;
 
         using var cancellation = new CancellationTokenSource();
         duplicateRun = cancellation;
+        duplicateAbortRequested = false;
         bool force = rebuildHashes.Checked;
         var candidates = duplicateCandidates;
         duplicateStatus.Text = "Duplikatsuche läuft …";
+        duplicatePath.Text = "";
         duplicateProgress.Value = 0;
         duplicateGrid.Rows.Clear();
         duplicateIssues.Rows.Clear();
+        duplicateIssueTab.Text = "Prüfhinweise";
         UpdateActions();
         var progress = new Progress<DuplicateProgress>(update =>
         {
@@ -100,27 +122,42 @@ internal sealed partial class InventoryForm
                 return;
             double fraction = update.Length == 0 ? 0 : (double)update.Position / update.Length;
             duplicateProgress.Value = update.Total == 0 ? 0 : Math.Min(100, (int)((update.Processed + fraction) * 100 / update.Total));
-            duplicateStatus.Text = $"{update.Phase} · {update.Processed:N0} / {update.Total:N0} · {update.Path}";
+            duplicateStatus.Text = $"{update.Phase} · {update.Processed:N0} / {update.Total:N0} · "
+                + $"{update.BytesRead / (double)(1L << 30):N2} GiB gelesen · Ø {update.BytesPerSecond / (1 << 20):N1} MiB/s";
+            duplicatePath.Text = update.Path;
         });
 
         try
         {
             var service = new DuplicateSearch(Path.Combine(store.DataFolder, "duplicate-hashes.json"));
             DuplicateResult result = await Task.Run(() => service.Run(candidates, force, progress, cancellation.Token));
-            PresentDuplicateResult(result);
-            if (result.Paused)
+            duplicatePath.Text = "";
+            if (duplicateAbortRequested)
             {
-                rebuildHashes.Checked = false;
-                startDuplicates.Text = "Suche fortsetzen";
+                duplicateStatus.Text = $"Abgebrochen · {result.BytesRead / (double)(1L << 30):N2} GiB gelesen";
+                duplicateProgress.Value = 0;
+                startDuplicates.Text = "Duplikatsuche starten";
             }
             else
             {
-                startDuplicates.Text = "Duplikatsuche starten";
-                duplicateProgress.Value = 100;
+                bool paused = result.Paused || cancellation.IsCancellationRequested;
+                PresentDuplicateResult(result with { Paused = paused });
+                if (paused)
+                {
+                    rebuildHashes.Checked = false;
+                    startDuplicates.Text = "Suche fortsetzen";
+                }
+                else
+                {
+                    startDuplicates.Text = "Duplikatsuche starten";
+                    duplicateProgress.Value = 100;
+                }
             }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
         {
+            duplicatePath.Text = "";
+            startDuplicates.Text = "Duplikatsuche starten";
             duplicateStatus.Text = $"Die Suche wurde beendet · {error.Message}";
         }
         finally
@@ -154,6 +191,7 @@ internal sealed partial class InventoryForm
         string count = result.Groups.Count == 1 ? "1 Gruppe" : $"{result.Groups.Count:N0} Gruppen";
         duplicateStatus.Text = $"{state} · {count} mit byteidentischen Dateien · "
             + $"{InventoryLabels.Size(result.Groups.Sum(group => group.ReclaimableBytes))} potenziell freigebbar · "
-            + $"{result.Reused:N0} Prüfwerte wiederverwendet";
+            + $"{result.BytesRead / (double)(1L << 30):N2} GiB gelesen";
+        duplicatePath.Text = $"Wiederverwendet · SHA-256-Prüfwerte {result.Reused:N0} · Bytevergleiche {result.ReusedComparisons:N0}";
     }
 }

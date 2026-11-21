@@ -248,7 +248,7 @@ internal sealed partial class InventoryForm
     private void UpdateFileRunActions()
     {
         FileRun? selected = SelectedRun;
-        bool idle = !fileRunBusy && scanning is null && duplicateRun is null && nameRun is null && !buildingPlan;
+        bool idle = !fileRunBusy && scanning is null && duplicateRun is null && nameRun is null && imageRun is null && !buildingPlan;
         chooseRun.Enabled = !fileRunBusy && fileRuns.Count > 0;
         resumeRun.Enabled = idle && selected?.CanContinue == true;
         undoRun.Enabled = idle && selected?.CanUndo == true;
@@ -260,7 +260,7 @@ internal sealed partial class InventoryForm
 
     private async Task ApprovePlanAsync()
     {
-        if (fileRunBusy || buildingPlan || nameRun is not null || activePlan is not { } request
+        if (fileRunBusy || buildingPlan || nameRun is not null || imageRun is not null || activePlan is not { } request
             || (request.CollectionEvidence is not null && importingExplorerFiles)
             || !planRows.Any(row => !row.Excluded) || planRows.Any(row => row.NeedsAttention))
             return;
@@ -341,7 +341,7 @@ internal sealed partial class InventoryForm
 
     private async Task RunFilesAsync(FileRun run, bool undo)
     {
-        if (fileRunBusy || scanning is not null || duplicateRun is not null || nameRun is not null)
+        if (fileRunBusy || scanning is not null || duplicateRun is not null || nameRun is not null || imageRun is not null)
             return;
         using var pause = new CancellationTokenSource();
         fileRunPause = pause;

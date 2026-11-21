@@ -76,13 +76,17 @@ internal sealed partial class InventoryForm
         nameFamilies.ResolveDrag = (row, _, _) => NameGroupItems(nameFamilies.Rows[row].Tag as NameFamily);
         nameMembers.ResolveDrag = (_, _, selection) => selection.Select(index => nameMembers.Rows[index].Tag)
             .OfType<NameMatch>().Select(member => NameDragItem(member, SelectedNameFamily?.Name)).ToArray();
-        foreach (FileDragGrid grid in new[] { files, duplicateGrid, nameFamilies, nameMembers })
+        imageGroups.ResolveDrag = (row, _, _) => ImageGroupItems(imageGroups.Rows[row].Tag as ImageGroup);
+        imageMembers.ResolveDrag = (_, _, selection) => ImageMemberItems(selection);
+        foreach (FileDragGrid grid in new[] { files, duplicateGrid, nameFamilies, nameMembers, imageGroups, imageMembers })
             grid.StartFileDrag = entries => StartCollectionDrag(grid, entries);
 
         AddCollectionGrip(files, "Markierte Dateien zur Sammlung ziehen.");
         AddCollectionGrip(duplicateGrid, "Markierte Dateien ziehen. Die Gruppennummer zieht die ganze Gruppe.");
         AddCollectionGrip(nameFamilies, "Ganze Namensgruppe zur Sammlung ziehen.");
         AddCollectionGrip(nameMembers, "Markierte Dateien zur Sammlung ziehen.");
+        AddCollectionGrip(imageGroups, "Sichtbare Bilder der Gruppe zur Sammlung ziehen.");
+        AddCollectionGrip(imageMembers, "Markierte Bilder zur Sammlung ziehen.");
 
         WireCollectionMenu(files, (row, selection) => files.ResolveDrag!(row, 1, selection));
         WireCollectionMenu(duplicateGrid, (row, selection) => DuplicateDragItems(row, 1, selection),
@@ -90,6 +94,11 @@ internal sealed partial class InventoryForm
         WireCollectionMenu(nameFamilies, group: row => NameGroupItems(nameFamilies.Rows[row].Tag as NameFamily));
         WireCollectionMenu(nameMembers, (row, selection) => nameMembers.ResolveDrag!(row, 0, selection),
             _ => NameGroupItems(SelectedNameFamily));
+        WireCollectionMenu(imageGroups, group: row => ImageGroupItems(imageGroups.Rows[row].Tag as ImageGroup),
+            groupText: "Sichtbare Bilder der Gruppe sammeln");
+        WireCollectionMenu(imageMembers, (row, selection) => imageMembers.ResolveDrag!(row, 0, selection));
+        WireImageReferenceMenu();
+        WireInventoryImageCommands();
     }
 
     private static void AddCollectionGrip(FileDragGrid grid, string help)
@@ -136,11 +145,11 @@ internal sealed partial class InventoryForm
     }
 
     private void WireCollectionMenu(FileDragGrid grid, Func<int, int[], CollectionInput[]>? selected = null,
-        Func<int, CollectionInput[]>? group = null)
+        Func<int, CollectionInput[]>? group = null, string groupText = "Ganze Gruppe sammeln")
     {
         var menu = new ContextMenuStrip();
         var selectedItem = selected is null ? null : new ToolStripMenuItem("Markierte Dateien sammeln");
-        var groupItem = group is null ? null : new ToolStripMenuItem("Ganze Gruppe sammeln");
+        var groupItem = group is null ? null : new ToolStripMenuItem(groupText);
         if (selectedItem is not null)
             menu.Items.Add(selectedItem);
         if (groupItem is not null)
@@ -336,6 +345,7 @@ internal sealed partial class InventoryForm
         bool available = collectedFiles.Count > 0 && CanAcceptCollectionDrop;
         viewCollection.Enabled = available;
         useCollection.Enabled = available;
+        UpdateImageCollectionAction();
     }
 
     private void OpenCollectionPlan()
