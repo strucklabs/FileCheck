@@ -31,7 +31,7 @@ internal sealed partial class InventoryForm
         duplicateStatus.Dock = DockStyle.Fill;
         layout.Controls.Add(duplicateStatus, 0, 1);
 
-        AddColumn(duplicateGrid, "Gruppe", 82);
+        AddColumn(duplicateGrid, "Gruppe ziehen", 113);
         AddColumn(duplicateGrid, "Dateiname", 220, fill: true);
         AddColumn(duplicateGrid, "Ordner", 350, fill: true);
         AddColumn(duplicateGrid, "Größe", 110);
@@ -140,7 +140,7 @@ internal sealed partial class InventoryForm
                 DuplicateMember member = group.Files[row];
                 string label = member.Stamp is null ? "Dateikennung unbekannt"
                     : member.Stamp.Links > 1 ? $"Hardlink ({member.Stamp.Links:N0} Pfade)" : "";
-                int item = duplicateGrid.Rows.Add($"{index + 1:N0}", member.File.Name, member.File.Folder, InventoryLabels.Size(member.File.Bytes),
+                int item = duplicateGrid.Rows.Add($"{CollectionGrip}  {index + 1:N0}", member.File.Name, member.File.Folder, InventoryLabels.Size(member.File.Bytes),
                     row == 0 ? InventoryLabels.Size(group.ReclaimableBytes) : "", label);
                 duplicateGrid.Rows[item].Tag = new CollectedDuplicate(group, member, index + 1);
                 duplicateGrid.Rows[item].Cells[0].ToolTipText = "Ziehe die Gruppennummer, um alle Dateien der Gruppe zu sammeln.";

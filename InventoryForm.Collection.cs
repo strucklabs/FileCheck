@@ -6,6 +6,8 @@ namespace FilesizeChecker;
 internal sealed partial class InventoryForm
 {
     private const string InternalCollectionDrop = "CheckTools.FilesizeChecker.Collection";
+    private const string CollectionGripColumn = "CollectionGrip";
+    private const string CollectionGrip = "≡";
     private const int CollectedPlanScope = 3;
     private static readonly Color DropIdle = Color.FromArgb(230, 243, 247);
     private static readonly Color DropHover = Color.FromArgb(198, 227, 236);
@@ -71,13 +73,122 @@ internal sealed partial class InventoryForm
             .Select(row => new CollectionInput(row.File, $"Inventar · {InventoryLabels.Status(row.Status)}"
                 + (row.Details.Length > 0 ? $" · {row.Details}" : ""))).ToArray();
         duplicateGrid.ResolveDrag = (row, column, selection) => DuplicateDragItems(row, column, selection);
-        nameFamilies.ResolveDrag = (row, _, _) => nameFamilies.Rows[row].Tag is NameFamily family
-            ? family.Members.Select(member => NameDragItem(member, family.Name)).ToArray() : [];
+        nameFamilies.ResolveDrag = (row, _, _) => NameGroupItems(nameFamilies.Rows[row].Tag as NameFamily);
         nameMembers.ResolveDrag = (_, _, selection) => selection.Select(index => nameMembers.Rows[index].Tag)
             .OfType<NameMatch>().Select(member => NameDragItem(member, SelectedNameFamily?.Name)).ToArray();
         foreach (FileDragGrid grid in new[] { files, duplicateGrid, nameFamilies, nameMembers })
             grid.StartFileDrag = entries => StartCollectionDrag(grid, entries);
+
+        AddCollectionGrip(files, "Markierte Dateien zur Sammlung ziehen.");
+        AddCollectionGrip(duplicateGrid, "Markierte Dateien ziehen. Die Gruppennummer zieht die ganze Gruppe.");
+        AddCollectionGrip(nameFamilies, "Ganze Namensgruppe zur Sammlung ziehen.");
+        AddCollectionGrip(nameMembers, "Markierte Dateien zur Sammlung ziehen.");
+
+        WireCollectionMenu(files, (row, selection) => files.ResolveDrag!(row, 1, selection));
+        WireCollectionMenu(duplicateGrid, (row, selection) => DuplicateDragItems(row, 1, selection),
+            row => DuplicateDragItems(row, 0, [row]));
+        WireCollectionMenu(nameFamilies, group: row => NameGroupItems(nameFamilies.Rows[row].Tag as NameFamily));
+        WireCollectionMenu(nameMembers, (row, selection) => nameMembers.ResolveDrag!(row, 0, selection),
+            _ => NameGroupItems(SelectedNameFamily));
     }
+
+    private static void AddCollectionGrip(FileDragGrid grid, string help)
+    {
+        var column = new DataGridViewTextBoxColumn
+        {
+            Name = CollectionGripColumn,
+            HeaderText = "Ziehen",
+            Width = 70,
+            MinimumWidth = 64,
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.None,
+            SortMode = DataGridViewColumnSortMode.NotSortable,
+            ToolTipText = help,
+            DefaultCellStyle = new DataGridViewCellStyle { ForeColor = Accent, Alignment = DataGridViewContentAlignment.MiddleCenter }
+        };
+        grid.Columns.Add(column);
+        column.DisplayIndex = 0;
+        if (!grid.VirtualMode)
+        {
+            grid.CellFormatting += (_, args) =>
+            {
+                if (args.ColumnIndex == column.Index && args.RowIndex >= 0)
+                {
+                    args.Value = CollectionGrip;
+                    args.FormattingApplied = true;
+                }
+            };
+        }
+        grid.CellMouseEnter += (_, args) =>
+        {
+            if (args.RowIndex >= 0 && args.ColumnIndex == column.Index
+                && (!grid.VirtualMode || Equals(grid.Rows[args.RowIndex].Cells[column.Index].Value, CollectionGrip)))
+            {
+                grid.Cursor = Cursors.SizeAll;
+                if (!grid.VirtualMode)
+                    grid.Rows[args.RowIndex].Cells[column.Index].ToolTipText = help;
+            }
+        };
+        grid.CellMouseLeave += (_, args) =>
+        {
+            if (args.RowIndex >= 0 && args.ColumnIndex == column.Index)
+                grid.Cursor = Cursors.Default;
+        };
+    }
+
+    private void WireCollectionMenu(FileDragGrid grid, Func<int, int[], CollectionInput[]>? selected = null,
+        Func<int, CollectionInput[]>? group = null)
+    {
+        var menu = new ContextMenuStrip();
+        var selectedItem = selected is null ? null : new ToolStripMenuItem("Markierte Dateien sammeln");
+        var groupItem = group is null ? null : new ToolStripMenuItem("Ganze Gruppe sammeln");
+        if (selectedItem is not null)
+            menu.Items.Add(selectedItem);
+        if (groupItem is not null)
+            menu.Items.Add(groupItem);
+        grid.ContextMenuStrip = menu;
+        grid.Disposed += (_, _) => menu.Dispose();
+
+        int? clickedRow = null;
+        CollectionInput[] selectedFiles = [];
+        CollectionInput[] groupFiles = [];
+        grid.CellMouseDown += (_, args) =>
+        {
+            if (args.Button != MouseButtons.Right)
+                return;
+            clickedRow = args.RowIndex;
+            if (args.RowIndex >= 0 && !grid.Rows[args.RowIndex].Selected)
+            {
+                grid.ClearSelection();
+                grid.Rows[args.RowIndex].Selected = true;
+            }
+        };
+        menu.Opening += (_, args) =>
+        {
+            int[] selection = grid.SelectedRows.Cast<DataGridViewRow>().Select(row => row.Index).Order().ToArray();
+            int row = clickedRow ?? (selection.Length > 0 ? selection[0] : grid.CurrentRow?.Index ?? -1);
+            clickedRow = null;
+            if (!CanAcceptCollectionDrop || row < 0 || row >= grid.Rows.Count)
+            {
+                args.Cancel = true;
+                return;
+            }
+
+            selectedFiles = selected?.Invoke(row, selection.Length > 0 ? selection : [row]) ?? [];
+            groupFiles = group?.Invoke(row) ?? [];
+            if (selectedItem is not null)
+                selectedItem.Enabled = selectedFiles.Length > 0;
+            if (groupItem is not null)
+                groupItem.Enabled = groupFiles.Length > 0;
+            args.Cancel = selectedFiles.Length == 0 && groupFiles.Length == 0;
+        };
+        if (selectedItem is not null)
+            selectedItem.Click += async (_, _) => await AddToCollectionAsync(selectedFiles);
+        if (groupItem is not null)
+            groupItem.Click += async (_, _) => await AddToCollectionAsync(groupFiles);
+    }
+
+    private CollectionInput[] NameGroupItems(NameFamily? family) => family is null ? []
+        : family.Members.Select(member => NameDragItem(member, family.Name)).ToArray();
 
     private CollectionInput[] DuplicateDragItems(int row, int column, int[] selection)
     {

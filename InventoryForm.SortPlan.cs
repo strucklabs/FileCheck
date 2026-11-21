@@ -53,11 +53,12 @@ internal sealed partial class InventoryForm
     {
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 8, Padding = new Padding(10, 7, 10, 5)
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 9, Padding = new Padding(10, 7, 10, 5)
         };
         for (int row = 0; row < 6; row++)
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         planScope.Items.AddRange(["Gesamtes Inventar", "Gefiltertes Inventar", "Markierte Inventarzeilen", "Gesammelte Dateien"]);
@@ -110,8 +111,9 @@ internal sealed partial class InventoryForm
         AddColumn(planGrid, "Herkunft und Befunde", 165, fill: true);
         planGrid.Columns[6].Visible = false;
         layout.Controls.Add(planGrid, 0, 6);
+        layout.Controls.Add(BuildSortConflictDetails(), 0, 7);
         planStatus.MaximumSize = new Size(950, 0);
-        layout.Controls.Add(planStatus, 0, 7);
+        layout.Controls.Add(planStatus, 0, 8);
         sortPlanTab.Controls.Add(layout);
 
         planDestination.TextChanged += (_, _) => ClearSortPlan();
@@ -444,6 +446,7 @@ internal sealed partial class InventoryForm
     {
         bool usable = !buildingPlan && !fileRunBusy && activePlan is not null;
         PlanRow[] selected = usable ? SelectedPlanRows() : [];
+        UpdateSortConflictDetails(selected);
         bool hasSource = planScope.SelectedIndex == CollectedPlanScope
             ? collectedFiles.Count > 0 && !importingExplorerFiles : allFiles.Any(IsPresent);
         previewPlan.Enabled = !buildingPlan && !fileRunBusy && scanning is null && hasSource;

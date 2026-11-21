@@ -27,9 +27,11 @@ Der Filesize-Checker ist ein lokales Windows-Tool der CheckTools-Reihe. Er erfas
 
 Eine feste Ablage unter den Ergebnislisten nimmt markierte Dateizeilen, vollständige Duplikat- oder Namensgruppen und Dateien aus dem Windows-Explorer an. Mehrfach hinzugefügte Pfade erscheinen einmal mit ihren jeweiligen Befunden. Beim Weitersammeln oder Entfernen von Einträgen aktualisiert sich die Vorschau der Sammlung. Ausschlüsse, eigene Ziele und weiterhin gültige Konfliktentscheidungen für bestehende Dateien bleiben erhalten. Das Ablegen und Übernehmen sammelt Verweise. Dateiaktionen erfolgen erst über die Vorschau, Vorabprüfung und Freigabe des Plans.
 
+Ziehgriffe kennzeichnen Dateien und Gruppen in den Listen. Das Kontextmenü übernimmt markierte Dateien oder die vollständige Gruppe in die Sammlung.
+
 ### Namenskollisionen
 
-Die Vorschau erkennt vorhandene Zieldateien und Kollisionen zwischen Einträgen desselben Plans. Sie zeigt für Quelle und Ziel Pfad, Größe und Änderungsdatum. Der Filter **Offen oder blockiert** zeigt die noch zu klärenden Einträge. Konfliktaktionen gelten für die markierten Konflikte oder gesammelt für alle offenen Namenskonflikte. Offene oder blockierte Einträge müssen vor der Freigabe geklärt oder ausgeschlossen werden.
+Die Vorschau erkennt vorhandene Zieldateien und Kollisionen zwischen Einträgen desselben Plans. Bei einer markierten Konfliktzeile zeigt sie Quelle und Ziel nebeneinander mit vollständigen Pfaden, Größen und Änderungsdaten. Bei einem Konflikt im Plan ist auch die konkurrierende Quelldatei sichtbar. Der Filter **Offen oder blockiert** zeigt die noch zu klärenden Einträge. Konfliktaktionen gelten für die markierten Konflikte oder gesammelt für alle offenen Namenskonflikte. Offene oder blockierte Einträge müssen vor der Freigabe geklärt oder ausgeschlossen werden.
 
 | Aktion | Verhalten |
 | --- | --- |
@@ -54,7 +56,7 @@ Ein dauerhaftes Protokoll hält vor jedem Eingriff den Ausgangszustand und ansch
 
 Abgeschlossene Verschiebeläufe bleiben auch nach einem Neustart rückgängig machbar, solange ihre Voraussetzungen erfüllt sind. Das Tool zeigt den Speicherverbrauch der Sicherungen an. Vor dem Freigeben von Speicher zeigt es, welche Läufe dadurch ganz oder teilweise ihre Rückgängig-Funktion verlieren, und wartet auf Bestätigung.
 
-Bei einem unerwarteten Fehler pausiert das Tool den restlichen Sortierlauf. Es zeigt abgeschlossene, ausstehende und teilweise abgeschlossene Aktionen. Sobald der tatsächliche Zustand eines teilweise abgeschlossenen Vorgangs geklärt ist, kann der Nutzer den Lauf fortsetzen oder abgeschlossene Verschiebungen zurücknehmen. Beim Fortsetzen prüft das Tool die ausstehenden Einträge erneut.
+Bei einem unerwarteten Fehler pausiert das Tool den restlichen Sortierlauf. Es zeigt den Grund und den nächsten möglichen Schritt und bietet einen Sprung zum betroffenen Eintrag. Abgeschlossene, ausstehende und teilweise abgeschlossene Aktionen bleiben im Protokoll erkennbar. Sobald der tatsächliche Zustand eines teilweise abgeschlossenen Vorgangs geklärt ist, kann der Nutzer den Lauf fortsetzen oder abgeschlossene Verschiebungen zurücknehmen. Beim Fortsetzen prüft das Tool die ausstehenden Einträge erneut.
 
 ## Weitere Ausbaustufen
 
@@ -62,6 +64,8 @@ Bei einem unerwarteten Fehler pausiert das Tool den restlichen Sortierlauf. Es z
 2. **Bild- und Videovergleich.** Bei Bildern zunächst Größen-, Format- und Kompressionsvarianten erkennen, danach Drehungen, Zuschnitte und ähnliche Serienbilder. Bei Videos umkodierte Vollkopien, gekürzte Fassungen und überlappende Ausschnitte erkennen. Für Ausschnitte die passenden Zeitbereiche anzeigen. Den Vergleich später mit einem separaten synthetischen Medienbestand prüfen.
 
 Die Oberfläche zeigt den Grund für jeden Treffer. Namensähnlichkeit, Hinweise auf eine Versionsbeziehung, visuelle Ähnlichkeit und bestätigte Bytegleichheit haben jeweils eigene Befunde.
+
+Einzelne Dateien lassen sich über **Datei prüfen** untersuchen. **Zwei Dateien vergleichen** öffnet die Gegenüberstellung von Versionsangaben und verfügbaren Inhaltsunterschieden. Die Ergebnisliste bietet die entsprechenden Aktionen für eine oder zwei markierte Dateien.
 
 ## Abnahme von Version 1
 

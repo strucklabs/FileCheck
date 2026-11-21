@@ -266,6 +266,7 @@ internal sealed partial class InventoryForm : Form
                 4 => InventoryLabels.Size(file.Bytes),
                 5 => file.ModifiedUtc.ToLocalTime().ToString("g"),
                 6 => result.Details,
+                7 => IsPresent(result) ? CollectionGrip : "",
                 _ => null
             };
         };
@@ -273,6 +274,11 @@ internal sealed partial class InventoryForm : Form
         {
             if (args.RowIndex < 0 || args.RowIndex >= visibleFiles.Count)
                 return;
+            if (files.Columns[CollectionGripColumn] is { } grip && args.ColumnIndex == grip.Index)
+            {
+                args.ToolTipText = grip.ToolTipText;
+                return;
+            }
             FileResult result = visibleFiles[args.RowIndex];
             args.ToolTipText = $"{result.File.Path}\n{result.File.Bytes:N0} Bytes · {result.File.Attributes}\n"
                 + $"Erstellt {result.File.CreatedUtc.ToLocalTime():G}"

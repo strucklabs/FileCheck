@@ -12,9 +12,22 @@ internal sealed partial class InventoryForm
     private readonly Button releaseBackups = CreateButton("Sicherungen freigeben …");
     private readonly DataGridView runGrid = CreateGrid();
     private readonly Label runStatus = CreateLabel("Hier erscheinen ausgeführte Sortierläufe.", Muted);
+    private readonly TableLayoutPanel runAttention = new()
+    {
+        Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        RowCount = 1, ColumnCount = 2, BackColor = Surface, Padding = new Padding(6, 3, 4, 3), Visible = false
+    };
+    private readonly Label runAttentionTitle = CreateLabel("", Ink);
+    private readonly Label runAttentionAction = CreateLabel("", Muted);
+    private readonly TextBox runAttentionReason = new()
+    {
+        AccessibleName = "Grund für die Unterbrechung", Dock = DockStyle.Fill, ReadOnly = true, BackColor = Color.White
+    };
+    private readonly Button jumpRunEntry = CreateButton("Zum betroffenen Eintrag");
     private readonly List<FileRun> fileRuns = [];
     private CancellationTokenSource? fileRunPause;
     private bool fileRunBusy;
+    private int runAttentionIndex = -1;
 
     private FileRunJournal Journal => new(store.DataFolder);
     private FileRun? SelectedRun => (chooseRun.SelectedItem as RunItem)?.Run;
@@ -30,23 +43,25 @@ internal sealed partial class InventoryForm
         runTab.BackColor = Color.White;
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(10, 8, 10, 8)
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(10, 8, 10, 8)
         };
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.Controls.Add(Flow(chooseRun, resumeRun, undoRun, pauseRun, releaseBackups), 0, 0);
         runStatus.AutoSize = false;
         runStatus.AutoEllipsis = true;
         runStatus.Dock = DockStyle.Fill;
         layout.Controls.Add(runStatus, 0, 1);
+        layout.Controls.Add(BuildRunAttention(), 0, 2);
 
         AddColumn(runGrid, "Status", 174);
         AddColumn(runGrid, "Quelldatei", 164, fill: true);
         AddColumn(runGrid, "Zielname", 164, fill: true);
         AddColumn(runGrid, "Zielordner", 240, fill: true);
         AddColumn(runGrid, "Hinweis", 230, fill: true);
-        layout.Controls.Add(runGrid, 0, 2);
+        layout.Controls.Add(runGrid, 0, 3);
         runTab.Controls.Add(layout);
 
         chooseRun.SelectedIndexChanged += (_, _) => RenderFileRun();
@@ -63,7 +78,30 @@ internal sealed partial class InventoryForm
             runStatus.Text = "Der Lauf pausiert nach der aktuellen Datei …";
         };
         releaseBackups.Click += async (_, _) => await ConfirmBackupReleaseAsync();
+        jumpRunEntry.Click += (_, _) => JumpToRunEntry();
         return runTab;
+    }
+
+    private Control BuildRunAttention()
+    {
+        runAttention.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        runAttention.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var text = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 3
+        };
+        for (int index = 0; index < 3; index++)
+            text.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        runAttentionTitle.Font = new Font(Font, FontStyle.Bold);
+        runAttentionTitle.Margin = new Padding(3, 2, 3, 2);
+        runAttentionAction.Margin = new Padding(3, 2, 3, 2);
+        runAttentionAction.MaximumSize = new Size(680, 0);
+        text.Controls.Add(runAttentionTitle, 0, 0);
+        text.Controls.Add(runAttentionReason, 0, 1);
+        text.Controls.Add(runAttentionAction, 0, 2);
+        runAttention.Controls.Add(text, 0, 0);
+        runAttention.Controls.Add(Flow(jumpRunEntry), 1, 0);
+        return runAttention;
     }
 
     private void LoadFileRuns()
@@ -104,6 +142,7 @@ internal sealed partial class InventoryForm
         runGrid.Rows.Clear();
         if (SelectedRun is not { } run)
         {
+            runAttentionIndex = -1;
             runStatus.Text = "Hier erscheinen ausgeführte Sortierläufe.";
             UpdateFileRunActions();
             return;
@@ -133,10 +172,58 @@ internal sealed partial class InventoryForm
         BackupRelease[] backups = new FileRunService(Journal).BackupsForRelease(run);
         int remaining = run.Entries.Count(entry => entry.Forward.Phase != TransferPhase.Finished);
         string state = run.Header.Direction == RunDirection.Undo ? $"{remaining:N0} nicht ausgeführt" : $"{remaining:N0} ausstehend";
-        string detailText = outcome ?? (run.HasOpenChanges ? "Unterbrochener Vorgang geprüft, Details in der Liste" : "");
+        string detailText = outcome ?? (run.Header.Direction == RunDirection.Forward && run.HasOpenChanges
+            ? "Unterbrochener Vorgang geprüft, Details in der Liste" : "");
         string detailSuffix = detailText.Length == 0 ? "" : $" · {detailText}";
         runStatus.Text = $"{state} · {backups.Length:N0} Sicherungen ({InventoryLabels.Size(backups.Sum(backup => backup.Bytes))}){detailSuffix}";
+        SetRunAttention(run, outcome);
         UpdateFileRunActions();
+    }
+
+    private void SetRunAttention(FileRun run, string? outcome)
+    {
+        bool undo = run.Header.Direction == RunDirection.Undo;
+        int interrupted = Array.FindIndex(run.Entries, entry => entry.ReleasingBackup || (!undo
+            ? entry.Error is not null || entry.Forward.Phase is not (TransferPhase.Ready or TransferPhase.Finished)
+            : entry.Forward.Phase == TransferPhase.Finished && !entry.Undone
+                && (entry.Error is not null || entry.Reverse.Phase != TransferPhase.Ready
+                    || entry.RemovingCopy || entry.CopyRemoved || entry.RestoringBackup)));
+        runAttentionIndex = interrupted >= 0 ? interrupted
+            : run.CanContinue ? Array.FindIndex(run.Entries, entry => entry.Forward.Phase != TransferPhase.Finished)
+            : undo && run.CanUndo ? Array.FindLastIndex(run.Entries, entry => entry.Forward.Phase == TransferPhase.Finished
+                && !entry.Undone && !entry.BackupReleased && !entry.ReleasingBackup) : -1;
+        if (runAttentionIndex < 0)
+            return;
+
+        FileRunEntry entry = run.Entries[runAttentionIndex];
+        runAttentionTitle.Text = entry.ReleasingBackup ? "Sicherungsfreigabe angehalten" : undo ? "Rücknahme unterbrochen"
+            : interrupted >= 0 ? "Sortierlauf angehalten" : "Sortierlauf wartet auf Fortsetzen";
+        string? reason = entry.Error ?? (interrupted >= 0 ? FileRunService.Inspect(run, runAttentionIndex) : outcome);
+        runAttentionReason.Text = reason ?? "";
+        runAttentionReason.Visible = !string.IsNullOrWhiteSpace(reason);
+        string action = entry.ReleasingBackup ? "Prüfe die Sicherung und wähle «Sicherungen freigeben»."
+            : undo && run.CanUndo ? "Kläre den Eintrag und wähle «Rücknahme fortsetzen»."
+            : run.CanContinue && interrupted >= 0 ? "Kläre den Eintrag und wähle «Fortsetzen»."
+            : run.CanContinue ? "Wähle «Fortsetzen», um die offenen Dateien zu bearbeiten."
+            : "Prüfe Quelle, Ziel und Hinweis des Eintrags im Protokoll.";
+        if (!entry.ReleasingBackup && run.CanContinue && !run.CanUndo)
+        {
+            action += run.Entries.Any(item => item.Forward.Phase == TransferPhase.Finished && !item.BackupReleased && !item.ReleasingBackup)
+                ? " Rückgängig ist bis zur Klärung des Teilabschlusses gesperrt."
+                : " Rückgängig benötigt einen abgeschlossenen Eintrag mit Wiederherstellungsdaten.";
+        }
+        runAttentionAction.Text = action;
+        jumpRunEntry.Text = interrupted >= 0 ? "Zum betroffenen Eintrag" : "Zum nächsten Eintrag";
+    }
+
+    private void JumpToRunEntry()
+    {
+        if (runAttentionIndex < 0 || runAttentionIndex >= runGrid.Rows.Count)
+            return;
+        runGrid.ClearSelection();
+        runGrid.CurrentCell = runGrid.Rows[runAttentionIndex].Cells[0];
+        runGrid.Rows[runAttentionIndex].Selected = true;
+        runGrid.Focus();
     }
 
     private static string EntryStatus(FileRunEntry entry, RunDirection direction)
@@ -168,6 +255,7 @@ internal sealed partial class InventoryForm
         undoRun.Text = selected?.Header.Direction == RunDirection.Undo ? "Rücknahme fortsetzen …" : "Rückgängig …";
         pauseRun.Enabled = fileRunPause?.IsCancellationRequested == false;
         releaseBackups.Enabled = idle && selected?.CanRelease == true;
+        runAttention.Visible = !fileRunBusy && runAttentionIndex >= 0;
     }
 
     private async Task ApprovePlanAsync()

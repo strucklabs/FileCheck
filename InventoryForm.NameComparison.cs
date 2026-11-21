@@ -8,8 +8,10 @@ internal sealed partial class InventoryForm
     private readonly Button findNames = CreateButton("Namensgruppen suchen", primary: true);
     private readonly Button stopNames = CreateButton("Abbrechen");
     private readonly Button readFamilyVersions = CreateButton("Versionen der Gruppe prüfen");
-    private readonly Button compareNameSelection = CreateButton("Markierte prüfen / vergleichen");
-    private readonly Button openVersionFiles = CreateButton("Dateien wählen …");
+    private readonly Button inspectNameSelection = CreateButton("Markierte Datei prüfen");
+    private readonly Button compareNameSelection = CreateButton("Zwei Markierte vergleichen");
+    private readonly Button openVersionFile = CreateButton("Datei prüfen …");
+    private readonly Button openVersionComparison = CreateButton("Zwei Dateien vergleichen …");
     private readonly FileDragGrid nameFamilies = CreateGrid();
     private readonly FileDragGrid nameMembers = CreateGrid();
     private readonly Label namesStatus = CreateLabel("Suche im Inventar nach Varianten eines Dateinamens.", Muted);
@@ -37,11 +39,12 @@ internal sealed partial class InventoryForm
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         nameSensitivity.Items.AddRange(["Streng", "Ausgewogen", "Breit"]);
         nameSensitivity.SelectedIndex = (int)SimilarityLevel.Balanced;
-        var toolbar = Flow(CreateLabel("Namensähnlichkeit", Muted), nameSensitivity, findNames, stopNames, openVersionFiles);
+        var toolbar = Flow(CreateLabel("Namensähnlichkeit", Muted), nameSensitivity, findNames, stopNames,
+            openVersionFile, openVersionComparison);
         layout.Controls.Add(toolbar, 0, 0);
         layout.SetColumnSpan(toolbar, 2);
         layout.Controls.Add(CreateLabel("Namensgruppen", Ink), 0, 1);
-        layout.Controls.Add(Flow(readFamilyVersions, compareNameSelection), 1, 1);
+        layout.Controls.Add(Flow(readFamilyVersions, inspectNameSelection, compareNameSelection), 1, 1);
 
         nameFamilies.MultiSelect = false;
         AddColumn(nameFamilies, "Namensstamm", 178, fill: true);
@@ -77,8 +80,10 @@ internal sealed partial class InventoryForm
         };
         nameMembers.SelectionChanged += (_, _) => UpdateNameActions();
         readFamilyVersions.Click += async (_, _) => await ReadFamilyVersionsAsync();
-        compareNameSelection.Click += async (_, _) => await CompareSelectedNamesAsync();
-        openVersionFiles.Click += async (_, _) => await PickVersionFilesAsync();
+        inspectNameSelection.Click += async (_, _) => await InspectSelectedNamesAsync(compare: false);
+        compareNameSelection.Click += async (_, _) => await InspectSelectedNamesAsync(compare: true);
+        openVersionFile.Click += async (_, _) => await PickVersionFilesAsync(compare: false);
+        openVersionComparison.Click += async (_, _) => await PickVersionFilesAsync(compare: true);
         return tab;
     }
 
@@ -91,8 +96,9 @@ internal sealed partial class InventoryForm
         nameSensitivity.Enabled = idle;
         stopNames.Enabled = nameRun?.IsCancellationRequested == false;
         readFamilyVersions.Enabled = idle && SelectedNameFamily is not null;
-        compareNameSelection.Enabled = idle && nameMembers.SelectedRows.Count is 1 or 2;
-        openVersionFiles.Enabled = idle;
+        inspectNameSelection.Enabled = idle && nameMembers.SelectedRows.Count == 1;
+        compareNameSelection.Enabled = idle && nameMembers.SelectedRows.Count == 2;
+        openVersionFile.Enabled = openVersionComparison.Enabled = idle;
         nameFamilies.Enabled = idle;
         nameMembers.Enabled = idle;
     }
@@ -281,25 +287,31 @@ internal sealed partial class InventoryForm
         RenderNameFamily();
     }
 
-    private async Task CompareSelectedNamesAsync()
+    private async Task InspectSelectedNamesAsync(bool compare)
     {
         FileEntry[] selected = nameMembers.SelectedRows.Cast<DataGridViewRow>().OrderBy(row => row.Index)
             .Select(row => row.Tag).OfType<NameMatch>().Select(match => match.File).ToArray();
-        if (selected.Length is 1 or 2)
-            await InspectFilesAsync(selected[0], selected.Length == 2 ? selected[1] : null);
+        if (selected.Length == (compare ? 2 : 1))
+            await InspectFilesAsync(selected[0], compare ? selected[1] : null);
     }
 
-    private async Task PickVersionFilesAsync()
+    private async Task PickVersionFilesAsync(bool compare)
     {
         using var dialog = new OpenFileDialog { CheckFileExists = true, Multiselect = false, RestoreDirectory = true };
-        dialog.Title = "Datei zur Versionsprüfung wählen";
+        dialog.Title = compare ? "Erste Datei zum Vergleich wählen" : "Datei zur Versionsprüfung wählen";
         if (dialog.ShowDialog(this) != DialogResult.OK)
             return;
         string left = dialog.FileName;
-        dialog.FileName = "";
-        dialog.InitialDirectory = Path.GetDirectoryName(left) ?? "";
-        dialog.Title = "Zweite Datei zum Vergleich wählen · Abbrechen für Einzelprüfung";
-        string? right = dialog.ShowDialog(this) == DialogResult.OK ? dialog.FileName : null;
+        string? right = null;
+        if (compare)
+        {
+            dialog.FileName = "";
+            dialog.InitialDirectory = Path.GetDirectoryName(left) ?? "";
+            dialog.Title = "Zweite Datei zum Vergleich wählen";
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return;
+            right = dialog.FileName;
+        }
         try
         {
             await InspectFilesAsync(FileVersions.ReadEntry(left), right is null ? null : FileVersions.ReadEntry(right));
