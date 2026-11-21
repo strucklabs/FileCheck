@@ -59,7 +59,12 @@ internal sealed partial class InventoryForm
         var browse = CreateButton("Ordner wählen …");
         browse.Click += (_, _) =>
         {
-            using var picker = new FolderBrowserDialog { ShowNewFolderButton = false, Description = "Zielordner wählen" };
+            using var picker = new FolderBrowserDialog
+            {
+                Description = "Zielordner wählen",
+                UseDescriptionForTitle = true,
+                ShowNewFolderButton = false
+            };
             if (picker.ShowDialog(this) == DialogResult.OK)
                 planDestination.Text = picker.SelectedPath;
         };
