@@ -157,6 +157,7 @@ internal sealed partial class InventoryForm : Form
         storageTab.Controls.Add(storageLayout);
         tabControl.TabPages.Add(storageTab);
         tabControl.TabPages.Add(BuildDuplicateTab());
+        tabControl.TabPages.Add(BuildNameComparisonTab());
         tabControl.TabPages.Add(BuildSortPlanTab());
         tabControl.TabPages.Add(BuildFileRunTab());
 
@@ -205,10 +206,11 @@ internal sealed partial class InventoryForm : Form
         };
         FormClosing += (_, args) =>
         {
-            if (scanning is null && duplicateRun is null && !fileRunBusy)
+            if (scanning is null && duplicateRun is null && nameRun is null && !fileRunBusy)
                 return;
             scanning?.Cancel();
             duplicateRun?.Cancel();
+            nameRun?.Cancel();
             fileRunPause?.Cancel();
             args.Cancel = true;
             scanStatus.Text = "Die laufende Suche wird angehalten. Das Fenster kann danach geschlossen werden.";
@@ -325,7 +327,7 @@ internal sealed partial class InventoryForm : Form
     private async Task ScanAsync()
     {
         var scanRoots = roots.Items.Cast<string>().ToArray();
-        if (scanRoots.Length == 0 || scanning is not null || duplicateRun is not null || fileRunBusy || !storeReadable)
+        if (scanRoots.Length == 0 || scanning is not null || duplicateRun is not null || nameRun is not null || fileRunBusy || !storeReadable)
             return;
 
         using var cancellation = new CancellationTokenSource();
@@ -398,6 +400,7 @@ internal sealed partial class InventoryForm : Form
         issueTab.Text = $"Scan-Hinweise ({issueCount:N0})";
         RefreshStorage();
         RefreshDuplicateSource();
+        ClearNameComparison();
         ClearSortPlan();
         UpdateActions();
     }
@@ -542,7 +545,7 @@ internal sealed partial class InventoryForm : Form
 
     private void UpdateActions()
     {
-        bool idle = scanning is null && duplicateRun is null && !fileRunBusy;
+        bool idle = scanning is null && duplicateRun is null && nameRun is null && !fileRunBusy;
         addRoot.Enabled = idle;
         roots.Enabled = idle;
         removeRoot.Enabled = idle && roots.SelectedIndex >= 0;
@@ -552,6 +555,7 @@ internal sealed partial class InventoryForm : Form
         UpdateDuplicateActions();
         UpdateSortPlanActions();
         UpdateFileRunActions();
+        UpdateNameActions();
     }
 
     private void ShowError(string heading, Exception error) => MessageBox.Show(this, $"{heading}\n\n{error.Message}",

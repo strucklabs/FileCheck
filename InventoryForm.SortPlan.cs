@@ -17,6 +17,7 @@ internal sealed partial class InventoryForm
     private readonly ComboBox planDate = CreateDropdown(145);
     private readonly ComboBox planMissingDate = CreateDropdown(191);
     private readonly TextBox planPattern = new() { Width = 120, PlaceholderText = "z. B. *.pdf" };
+    private readonly CheckBox planFuzzyNames = CreateCriterion("Erweiterte Namensähnlichkeit", SortCriteria.FuzzyNames);
     private readonly ComboBox planRuleName = new() { Width = 220, DropDownStyle = ComboBoxStyle.DropDown };
     private readonly Button previewPlan = CreateButton("Vorschau erstellen", primary: true);
     private readonly Button executePlan = CreateButton("Prüfen und ausführen …");
@@ -69,7 +70,7 @@ internal sealed partial class InventoryForm
         planMissingDate.Items.AddRange(["Ordner «Ohne Datum»", "Anderen Zeitstempel verwenden"]);
         planMissingDate.SelectedIndex = 0;
         layout.Controls.Add(Flow(CreateLabel("Datumsquelle", Muted), planDate, planMissingDate,
-            CreateLabel("Namensmuster", Muted), planPattern), 0, 2);
+            CreateLabel("Namensmuster", Muted), planPattern, planFuzzyNames), 0, 2);
 
         planRuleName.AccessibleName = "Name einer Sortierregel";
         var saveRule = CreateButton("Regel speichern");
@@ -103,6 +104,7 @@ internal sealed partial class InventoryForm
         planDate.SelectedIndexChanged += (_, _) => ClearSortPlan();
         planMissingDate.SelectedIndexChanged += (_, _) => ClearSortPlan();
         planPattern.TextChanged += (_, _) => ClearSortPlan();
+        planFuzzyNames.CheckedChanged += (_, _) => ClearSortPlan();
         foreach (CheckBox criterion in planCriteria)
             criterion.CheckedChanged += (_, _) => ClearSortPlan();
         resolveAction.SelectedIndexChanged += (_, _) => UpdateSortPlanActions();
@@ -127,7 +129,8 @@ internal sealed partial class InventoryForm
     };
 
     private SortRule CurrentRule() => new(planRuleName.Text.Trim(),
-        planCriteria.Where(box => box.Checked).Aggregate(SortCriteria.None, (combined, box) => combined | (SortCriteria)box.Tag!),
+        planCriteria.Where(box => box.Checked).Aggregate(SortCriteria.None, (combined, box) => combined | (SortCriteria)box.Tag!)
+            | (planCriteria[4].Checked && planFuzzyNames.Checked ? SortCriteria.FuzzyNames : SortCriteria.None),
         (SortDate)planDate.SelectedIndex, (MissingDate)planMissingDate.SelectedIndex, planPattern.Text.Trim());
 
     private string SortRulesPath => Path.Combine(store.DataFolder, "sort-rules.json");
@@ -181,6 +184,7 @@ internal sealed partial class InventoryForm
     {
         foreach (CheckBox box in planCriteria)
             box.Checked = rule.Criteria.HasFlag((SortCriteria)box.Tag!);
+        planFuzzyNames.Checked = rule.Criteria.HasFlag(SortCriteria.FuzzyNames);
         planDate.SelectedIndex = (int)rule.Date;
         planMissingDate.SelectedIndex = (int)rule.MissingDate;
         planPattern.Text = rule.Pattern;
@@ -335,7 +339,7 @@ internal sealed partial class InventoryForm
         bool usable = !buildingPlan && !fileRunBusy && activePlan is not null;
         PlanRow[] selected = usable ? SelectedPlanRows() : [];
         previewPlan.Enabled = !buildingPlan && !fileRunBusy && scanning is null && allFiles.Any(IsPresent);
-        executePlan.Enabled = usable && scanning is null && duplicateRun is null && planRows.Any(row => !row.Excluded);
+        executePlan.Enabled = usable && scanning is null && duplicateRun is null && nameRun is null && planRows.Any(row => !row.Excluded);
         changePlanFolder.Enabled = selected.Any(row => !row.Excluded);
         excludeRows.Enabled = selected.Any(row => !row.Excluded);
         includeRows.Enabled = selected.Any(row => row.Excluded);
@@ -344,5 +348,6 @@ internal sealed partial class InventoryForm
         resolvePrefix.Enabled = resolveSuffix.Enabled = !buildingPlan && resolveAction.SelectedIndex == 3;
         planDate.Enabled = planMissingDate.Enabled = planCriteria[1].Checked;
         planPattern.Enabled = planCriteria[3].Checked;
+        planFuzzyNames.Enabled = planCriteria[4].Checked;
     }
 }

@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 namespace FilesizeChecker.Inventory;
 
 [Flags]
-internal enum SortCriteria { None = 0, Type = 1, Date = 2, Size = 4, Pattern = 8, NameFamily = 16 }
+internal enum SortCriteria { None = 0, Type = 1, Date = 2, Size = 4, Pattern = 8, NameFamily = 16, FuzzyNames = 32 }
 internal enum SortDate { Modified, Created }
 internal enum MissingDate { OwnFolder, OtherTimestamp }
 internal enum CollisionAction { Pending, Skip, Replace, KeepBoth, Affixes }
@@ -43,9 +43,7 @@ internal static partial class SortPlanning
             throw new ArgumentException("Gib für das Namensmuster zum Beispiel *.pdf ein.");
 
         string root = NormalizeFolder(destination);
-        var names = files.ToDictionary(file => file.Path, file => NormalizeName(file.Name), InventoryPaths.Comparer);
-        var families = names.Values.GroupBy(name => name, InventoryPaths.Comparer)
-            .Where(group => group.Skip(1).Any()).ToDictionary(group => group.Key, group => group.First(), InventoryPaths.Comparer);
+        Dictionary<string, string> families = NameFolders(files, rule.Criteria);
         var claimed = new HashSet<string>(InventoryPaths.Comparer);
         var folderErrors = new Dictionary<string, string?>(InventoryPaths.Comparer);
         var rows = new List<PlanRow>(files.Length);
@@ -61,7 +59,7 @@ internal static partial class SortPlanning
             }
 
             string family = rule.Criteria.HasFlag(SortCriteria.NameFamily)
-                ? families.GetValueOrDefault(names[file.Path], "Einzeldateien") : "";
+                ? families.GetValueOrDefault(file.Path, "Einzeldateien") : "";
             try
             {
                 string folder = choice.Folder is null ? BuildFolder(root, rule, file, family) : NormalizeFolder(choice.Folder);
@@ -78,6 +76,30 @@ internal static partial class SortPlanning
             }
         }
         return [.. rows];
+    }
+
+    private static Dictionary<string, string> NameFolders(FileEntry[] files, SortCriteria criteria)
+    {
+        var folders = new Dictionary<string, string>(InventoryPaths.Comparer);
+        if (!criteria.HasFlag(SortCriteria.NameFamily))
+            return folders;
+        if (criteria.HasFlag(SortCriteria.FuzzyNames))
+        {
+            foreach (NameFamily family in NameSimilarity.Find(files, SimilarityLevel.Balanced))
+            {
+                foreach (NameMatch member in family.Members)
+                    folders[member.File.Path] = family.Name;
+            }
+        }
+        else
+        {
+            foreach (var group in files.GroupBy(file => NormalizeName(file.Name), InventoryPaths.Comparer).Where(group => group.Skip(1).Any()))
+            {
+                foreach (FileEntry file in group)
+                    folders[file.Path] = group.Key;
+            }
+        }
+        return folders;
     }
 
     private static string BuildFolder(string root, SortRule rule, FileEntry file, string family)

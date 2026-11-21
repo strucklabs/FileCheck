@@ -161,7 +161,7 @@ internal sealed partial class InventoryForm
     private void UpdateFileRunActions()
     {
         FileRun? selected = SelectedRun;
-        bool idle = !fileRunBusy && scanning is null && duplicateRun is null && !buildingPlan;
+        bool idle = !fileRunBusy && scanning is null && duplicateRun is null && nameRun is null && !buildingPlan;
         chooseRun.Enabled = !fileRunBusy && fileRuns.Count > 0;
         resumeRun.Enabled = idle && selected?.CanContinue == true;
         undoRun.Enabled = idle && selected?.CanUndo == true;
@@ -172,7 +172,7 @@ internal sealed partial class InventoryForm
 
     private async Task ApprovePlanAsync()
     {
-        if (fileRunBusy || activePlan is not { } request || planRows.Length == 0)
+        if (fileRunBusy || nameRun is not null || activePlan is not { } request || planRows.Length == 0)
             return;
         PlanRow[] approvedRows = planRows;
         FileRunPreflight preflight;
@@ -251,7 +251,7 @@ internal sealed partial class InventoryForm
 
     private async Task RunFilesAsync(FileRun run, bool undo)
     {
-        if (fileRunBusy || scanning is not null || duplicateRun is not null)
+        if (fileRunBusy || scanning is not null || duplicateRun is not null || nameRun is not null)
             return;
         using var pause = new CancellationTokenSource();
         fileRunPause = pause;
@@ -281,6 +281,7 @@ internal sealed partial class InventoryForm
         }
         ClearSortPlan();
         RefreshDuplicateSource();
+        ClearNameComparison();
         RenderFileRun(result);
         UpdateActions();
         scanStatus.Text = "Dateibestand kann sich geändert haben. Scanne das Inventar bei Bedarf erneut.";
