@@ -13,10 +13,15 @@ internal enum CollisionAction { Pending, Skip, Replace, KeepBoth, Affixes }
 internal sealed record SortRule(string Name, SortCriteria Criteria, SortDate Date, MissingDate MissingDate,
     string Pattern);
 internal sealed record PlanChoice(bool Excluded = false, string? Folder = null,
-    CollisionAction Collision = CollisionAction.Pending, string Prefix = "", string Suffix = "");
+    CollisionAction Collision = CollisionAction.Pending, string Prefix = "", string Suffix = "",
+    string? ConflictTarget = null, string? ResolvedTarget = null, WindowsFileStamp? ExpectedReplacement = null);
 internal sealed record PlanRow(FileEntry Source, string Target, string Group, string Action,
     string Details, bool Blocked = false, bool Collision = false, bool Excluded = false, bool Replace = false,
-    WindowsFileStamp? Replacement = null);
+    WindowsFileStamp? Replacement = null, string? ConflictTarget = null)
+{
+    public bool NeedsAttention => Blocked && !Excluded;
+    public bool IsOpenConflict => NeedsAttention && Collision;
+}
 
 [JsonSerializable(typeof(SortRule[]))]
 internal partial class SortRulesJson : JsonSerializerContext;
@@ -37,8 +42,6 @@ internal static partial class SortPlanning
     {
         if (string.IsNullOrWhiteSpace(destination) || !Path.IsPathFullyQualified(destination))
             throw new ArgumentException("Wähle einen absoluten Zielordner.");
-        if (rule.Criteria == SortCriteria.None)
-            throw new ArgumentException("Wähle mindestens ein Sortierkriterium.");
         if (rule.Criteria.HasFlag(SortCriteria.Pattern) && string.IsNullOrWhiteSpace(rule.Pattern))
             throw new ArgumentException("Gib für das Namensmuster zum Beispiel *.pdf ein.");
 
@@ -133,6 +136,9 @@ internal static partial class SortPlanning
         if (InventoryPaths.Comparer.Equals(file.Path, target))
             return new PlanRow(file, target, family, "Übersprungen", "Quelle liegt bereits am Ziel.", Excluded: true);
 
+        if (choice.ConflictTarget is not null && !InventoryPaths.Comparer.Equals(choice.ConflictTarget, target))
+            choice = choice with { Collision = CollisionAction.Pending, ResolvedTarget = null, ExpectedReplacement = null };
+
         FileAttributes? attributes = GetAttributes(target);
         bool planned = claimed.Contains(target);
         bool collision = planned || attributes is not null;
@@ -153,14 +159,20 @@ internal static partial class SortPlanning
         switch (choice.Collision)
         {
             case CollisionAction.Skip:
-                return new PlanRow(file, target, family, "Übersprungen", reason, Collision: true, Excluded: true);
+                return new PlanRow(file, target, family, "Übersprungen", reason, Collision: true, Excluded: true, ConflictTarget: target);
             case CollisionAction.Replace when !planned && !directory && !reparse:
-                WindowsFileStamp replacement = WindowsFileOperations.Probe(target)
-                    ?? throw new IOException("Die Zieldatei hat sich während der Vorschau geändert.");
                 claimed.Add(target);
+                WindowsFileStamp? replacement;
+                try { replacement = WindowsFileOperations.Probe(target); }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                {
+                    return OpenConflict(file, target, family, $"Zieldatei lässt sich für Ersetzen nicht prüfen. {error.Message}");
+                }
+                if (replacement is null || (choice.ExpectedReplacement is not null && replacement != choice.ExpectedReplacement))
+                    return OpenConflict(file, target, family, "Zieldatei hat sich seit der Entscheidung geändert. Bitte neu entscheiden.");
                 return new PlanRow(file, target, family, $"{action} · Ersetzen",
                     $"Zieldatei vorhanden · {InventoryLabels.Size(replacement.Bytes)} · geändert {DateTime.FromFileTimeUtc(replacement.Written).ToLocalTime():g}",
-                    Collision: true, Replace: true, Replacement: replacement);
+                    Collision: true, Replace: true, Replacement: replacement, ConflictTarget: target);
             case CollisionAction.KeepBoth:
             case CollisionAction.Affixes:
                 string stem = Path.GetFileNameWithoutExtension(file.Name);
@@ -168,24 +180,31 @@ internal static partial class SortPlanning
                     stem = choice.Prefix + stem + choice.Suffix;
                 try
                 {
-                    string free = FindFree(Path.GetDirectoryName(target)!, stem, file.Extension, claimed,
-                        choice.Collision == CollisionAction.KeepBoth);
+                    string free = choice.ResolvedTarget ?? FindFree(Path.GetDirectoryName(target)!, stem, file.Extension,
+                        claimed, choice.Collision == CollisionAction.KeepBoth);
+                    if (claimed.Contains(free) || GetAttributes(free) is not null)
+                    {
+                        claimed.Add(target);
+                        return OpenConflict(file, target, family, $"Das gewählte Ziel ist inzwischen belegt: {free}");
+                    }
                     claimed.Add(free);
-                    return new PlanRow(file, free, family, action, reason, Collision: true);
+                    return new PlanRow(file, free, family, action, reason, Collision: true, ConflictTarget: target);
                 }
                 catch (Exception error) when (error is ArgumentException or IOException or UnauthorizedAccessException)
                 {
                     claimed.Add(target);
-                    return new PlanRow(file, target, family, "Konflikt offen", error.Message, Blocked: true, Collision: true);
+                    return OpenConflict(file, target, family, error.Message);
                 }
             default:
                 claimed.Add(target);
                 bool canReplace = !planned && !directory && !reparse;
-                return new PlanRow(file, target, family, "Konflikt offen",
-                    canReplace ? reason : $"{reason} Wähle einen anderen Namen oder überspringe den Eintrag.",
-                    Blocked: true, Collision: true);
+                return OpenConflict(file, target, family,
+                    canReplace ? reason : $"{reason} Wähle einen anderen Namen oder überspringe den Eintrag.");
         }
     }
+
+    private static PlanRow OpenConflict(FileEntry file, string target, string family, string reason) =>
+        new(file, target, family, "Konflikt offen", reason, Blocked: true, Collision: true, ConflictTarget: target);
 
     private static string FindFree(string folder, string stem, string extension, HashSet<string> claimed, bool numbered)
     {

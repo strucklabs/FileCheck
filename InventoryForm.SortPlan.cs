@@ -9,6 +9,10 @@ internal sealed partial class InventoryForm
     private readonly TextBox planDestination = new() { Width = 400, PlaceholderText = "Absoluter Zielordner" };
     private readonly ComboBox planScope = CreateDropdown(192);
     private readonly ComboBox planMode = CreateDropdown(112);
+    private readonly CheckBox directDestination = new()
+    {
+        Text = "Direkt in den Zielordner", AutoSize = true, Margin = new Padding(3, 6, 9, 4)
+    };
     private readonly CheckBox[] planCriteria =
     [
         CreateCriterion("Dateityp", SortCriteria.Type), CreateCriterion("Datum", SortCriteria.Date),
@@ -29,7 +33,11 @@ internal sealed partial class InventoryForm
     private readonly TextBox resolvePrefix = new() { Width = 95, PlaceholderText = "Präfix" };
     private readonly TextBox resolveSuffix = new() { Width = 95, PlaceholderText = "Suffix" };
     private readonly Button resolveSelected = CreateButton("Auf Auswahl anwenden");
-    private readonly Button resolveAll = CreateButton("Auf alle Konflikte anwenden");
+    private readonly Button resolveAll = CreateButton("Auf offene Konflikte anwenden");
+    private readonly CheckBox showPlanIssues = new()
+    {
+        Text = "Offen oder blockiert (0)", AutoSize = true, Margin = new Padding(10, 6, 6, 3)
+    };
     private readonly DataGridView planGrid = CreateGrid();
     private readonly Label planStatus = CreateLabel("Wähle Ziel und Sortierkriterien für die Vorschau.", Muted);
     private readonly Dictionary<string, PlanChoice> planChoices = new(InventoryPaths.Comparer);
@@ -70,7 +78,7 @@ internal sealed partial class InventoryForm
         };
         layout.Controls.Add(Flow(planDestination, browse, planScope, planMode), 0, 0);
         planCriteria[0].Checked = true;
-        layout.Controls.Add(Flow([CreateLabel("Reihenfolge der Unterordner", Muted), .. planCriteria]), 0, 1);
+        layout.Controls.Add(Flow([directDestination, CreateLabel("Unterordner nach", Muted), .. planCriteria]), 0, 1);
         planDate.Items.AddRange(["Änderungsdatum", "Erstellungsdatum"]);
         planDate.SelectedIndex = 0;
         planMissingDate.Items.AddRange(["Ordner «Ohne Datum»", "Anderen Zeitstempel verwenden"]);
@@ -87,7 +95,7 @@ internal sealed partial class InventoryForm
                 ApplyRule(savedRules[planRuleName.SelectedIndex]);
         };
         layout.Controls.Add(Flow(CreateLabel("Sortierregel", Muted), planRuleName, saveRule, previewPlan, executePlan), 0, 3);
-        layout.Controls.Add(Flow(excludeRows, includeRows, changePlanFolder), 0, 4);
+        layout.Controls.Add(Flow(excludeRows, includeRows, changePlanFolder, showPlanIssues), 0, 4);
 
         resolveAction.Items.AddRange(["Überspringen", "Ersetzen", "Beide behalten", "Präfix / Suffix"]);
         resolveAction.SelectedIndex = 0;
@@ -109,6 +117,7 @@ internal sealed partial class InventoryForm
         planDestination.TextChanged += (_, _) => ClearSortPlan();
         planScope.SelectedIndexChanged += (_, _) => ClearSortPlan();
         planMode.SelectedIndexChanged += (_, _) => ClearSortPlan();
+        directDestination.CheckedChanged += (_, _) => ClearSortPlan();
         planDate.SelectedIndexChanged += (_, _) => ClearSortPlan();
         planMissingDate.SelectedIndexChanged += (_, _) => ClearSortPlan();
         planPattern.TextChanged += (_, _) => ClearSortPlan();
@@ -117,17 +126,19 @@ internal sealed partial class InventoryForm
             criterion.CheckedChanged += (_, _) => ClearSortPlan();
         resolveAction.SelectedIndexChanged += (_, _) => UpdateSortPlanActions();
         planGrid.SelectionChanged += (_, _) => UpdateSortPlanActions();
+        showPlanIssues.CheckedChanged += (_, _) => RenderSortPlan();
         previewPlan.Click += async (_, _) => await StartSortPreviewAsync();
         executePlan.Click += async (_, _) => await ApprovePlanAsync();
         excludeRows.Click += async (_, _) => await ChangePlanRowsAsync(SelectedPlanRows(), choice => choice with { Excluded = true });
         includeRows.Click += async (_, _) => await ChangePlanRowsAsync(SelectedPlanRows(), choice => choice with
         {
             Excluded = false,
-            Collision = choice.Collision == CollisionAction.Skip ? CollisionAction.Pending : choice.Collision
+            Collision = choice.Collision == CollisionAction.Skip ? CollisionAction.Pending : choice.Collision,
+            ConflictTarget = choice.Collision == CollisionAction.Skip ? null : choice.ConflictTarget
         });
         changePlanFolder.Click += async (_, _) => await SetPlanFolderAsync();
         resolveSelected.Click += async (_, _) => await ResolveConflictsAsync(SelectedPlanRows());
-        resolveAll.Click += async (_, _) => await ResolveConflictsAsync(planRows);
+        resolveAll.Click += async (_, _) => await ResolveConflictsAsync(planRows.Where(row => row.IsOpenConflict));
         return sortPlanTab;
     }
 
@@ -137,7 +148,8 @@ internal sealed partial class InventoryForm
     };
 
     private SortRule CurrentRule() => new(planRuleName.Text.Trim(),
-        planCriteria.Where(box => box.Checked).Aggregate(SortCriteria.None, (combined, box) => combined | (SortCriteria)box.Tag!)
+        directDestination.Checked ? SortCriteria.None : planCriteria.Where(box => box.Checked)
+            .Aggregate(SortCriteria.None, (combined, box) => combined | (SortCriteria)box.Tag!)
             | (planCriteria[4].Checked && planFuzzyNames.Checked ? SortCriteria.FuzzyNames : SortCriteria.None),
         (SortDate)planDate.SelectedIndex, (MissingDate)planMissingDate.SelectedIndex, planPattern.Text.Trim());
 
@@ -159,10 +171,15 @@ internal sealed partial class InventoryForm
     private void SaveSortRule()
     {
         SortRule rule = CurrentRule();
-        if (rule.Name.Length == 0 || rule.Criteria == SortCriteria.None
+        if (rule.Name.Length == 0)
+        {
+            planStatus.Text = "Gib einen Regelnamen an.";
+            return;
+        }
+        if ((!directDestination.Checked && rule.Criteria == SortCriteria.None)
             || (rule.Criteria.HasFlag(SortCriteria.Pattern) && rule.Pattern.Length == 0))
         {
-            planStatus.Text = "Gib einen Regelnamen und mindestens ein vollständiges Sortierkriterium an.";
+            planStatus.Text = "Wähle ein vollständiges Sortierkriterium oder die direkte Ablage.";
             return;
         }
 
@@ -190,6 +207,7 @@ internal sealed partial class InventoryForm
 
     private void ApplyRule(SortRule rule)
     {
+        directDestination.Checked = rule.Criteria == SortCriteria.None;
         foreach (CheckBox box in planCriteria)
             box.Checked = rule.Criteria.HasFlag((SortCriteria)box.Tag!);
         planFuzzyNames.Checked = rule.Criteria.HasFlag(SortCriteria.FuzzyNames);
@@ -202,6 +220,12 @@ internal sealed partial class InventoryForm
     {
         if (planScope.SelectedIndex == CollectedPlanScope && importingExplorerFiles)
             return Task.CompletedTask;
+        SortRule rule = CurrentRule();
+        if (rule.Criteria == SortCriteria.None && !directDestination.Checked)
+        {
+            planStatus.Text = "Wähle ein Sortierkriterium oder «Direkt in den Zielordner».";
+            return Task.CompletedTask;
+        }
         IEnumerable<FileResult> inventorySource = planScope.SelectedIndex switch
         {
             1 => visibleFiles,
@@ -212,71 +236,76 @@ internal sealed partial class InventoryForm
         CollectedFile[]? collection = planScope.SelectedIndex == CollectedPlanScope ? collectedFiles.Items.ToArray() : null;
         IEnumerable<FileEntry> source = collection is null ? inventorySource.Where(IsPresent).Select(row => row.File)
             : collection.Select(entry => entry.File);
+        return SetSortPreviewSourceAsync(source, planDestination.Text.Trim(), rule, planMode.SelectedIndex == 1, collection);
+    }
+
+    private Task UpdateCollectedSortPlanAsync()
+    {
+        if (planScope.SelectedIndex != CollectedPlanScope || activePlan is not { CollectionEvidence: not null } request)
+            return Task.CompletedTask;
+
+        CollectedFile[] collection = collectedFiles.Items.ToArray();
+        return SetSortPreviewSourceAsync(collection.Select(entry => entry.File), request.Destination, request.Rule, request.Move, collection);
+    }
+
+    private Task SetSortPreviewSourceAsync(IEnumerable<FileEntry> source, string destination, SortRule rule, bool move,
+        CollectedFile[]? collection)
+    {
         HashSet<string> artifacts = CurrentRunArtifacts();
+        // Vorhandene Einträge beanspruchen ihre Zielnamen vor neu gesammelten Dateien.
+        var previousOrder = (activePlan?.Files ?? []).Select((file, index) => (file.Path, index))
+            .ToDictionary(item => item.Path, item => item.index, InventoryPaths.Comparer);
         FileEntry[] entries = source.Where(file => !artifacts.Contains(file.Path))
             .DistinctBy(file => file.Path, InventoryPaths.Comparer)
-            .OrderBy(file => file.Path, InventoryPaths.Comparer).ToArray();
+            .OrderBy(file => previousOrder.GetValueOrDefault(file.Path, int.MaxValue))
+            .ThenBy(file => file.Path, InventoryPaths.Comparer).ToArray();
         if (entries.Length == 0)
         {
-            planStatus.Text = "Im gewählten Bereich gibt es keine erreichbaren Dateien.";
+            ClearSortPlan();
+            planStatus.Text = collection is { Length: 0 } ? "Die Sammlung ist leer."
+                : "Im gewählten Bereich gibt es keine erreichbaren Dateien.";
             return Task.CompletedTask;
         }
-        planChoices.Clear();
+
+        var currentPaths = entries.Select(file => file.Path).ToHashSet(InventoryPaths.Comparer);
+        foreach (string path in planChoices.Keys.Where(path => !currentPaths.Contains(path)).ToArray())
+            planChoices.Remove(path);
         var evidence = collection?.ToDictionary(entry => entry.File.Path, entry => entry.Summary, InventoryPaths.Comparer);
-        activePlan = new SortPlanInput(entries, planDestination.Text.Trim(), CurrentRule(), planMode.SelectedIndex == 1, evidence);
+        activePlan = new SortPlanInput(entries, destination, rule, move, evidence);
         return RefreshSortPreviewAsync();
     }
 
     private async Task RefreshSortPreviewAsync()
     {
-        if (activePlan is not { } request || buildingPlan)
+        if (activePlan is null || buildingPlan)
             return;
         buildingPlan = true;
-        var choices = new Dictionary<string, PlanChoice>(planChoices, InventoryPaths.Comparer);
-        var selected = SelectedPlanRows().Select(row => row.Source.Path).ToHashSet(InventoryPaths.Comparer);
         planStatus.Text = "Vorschau wird erstellt …";
         UpdateSortPlanActions();
 
         try
         {
-            PlanRow[] result = await Task.Run(() => SortPlanning.Create(request.Files, request.Destination,
-                request.Rule, request.Move, choices));
-            if (activePlan != request || IsDisposed)
-                return;
-            planRows = result;
-            planGrid.Rows.Clear();
-            planGrid.Columns[6].Visible = request.CollectionEvidence is not null;
-            foreach (PlanRow row in result)
+            while (activePlan is { } request && !IsDisposed)
             {
-                string evidence = request.CollectionEvidence?.GetValueOrDefault(row.Source.Path) ?? "";
-                int index = planGrid.Rows.Add(row.Source.Name, Path.GetFileName(row.Target), Path.GetDirectoryName(row.Target) ?? "",
-                    row.Group, row.Action, row.Details, evidence);
-                DataGridViewRow item = planGrid.Rows[index];
-                item.Tag = row;
-                item.Cells[0].ToolTipText = $"{row.Source.Path}\n{InventoryLabels.Size(row.Source.Bytes)} · geändert {row.Source.ModifiedUtc.ToLocalTime():g}";
-                item.Cells[1].ToolTipText = row.Target;
-                item.Cells[2].ToolTipText = row.Target;
-                item.Cells[5].ToolTipText = row.Details;
-                item.Cells[6].ToolTipText = evidence;
-                if (row.Blocked)
-                    item.Cells[4].Style.ForeColor = Color.Maroon;
-            }
-            planGrid.ClearSelection();
-            foreach (DataGridViewRow item in planGrid.Rows)
-            {
-                if (item.Tag is PlanRow row && selected.Contains(row.Source.Path))
-                    item.Selected = true;
-            }
-            int blocked = result.Count(row => row.Blocked);
-            int excluded = result.Count(row => row.Excluded);
-            planStatus.Text = $"Vorschau · {result.Length - blocked - excluded:N0} geplant · {blocked:N0} offen oder blockiert · {excluded:N0} übersprungen";
-        }
-        catch (Exception error) when (error is ArgumentException or IOException or UnauthorizedAccessException)
-        {
-            if (activePlan == request && !IsDisposed)
-            {
-                ClearSortPlan();
-                planStatus.Text = error.Message;
+                var choices = new Dictionary<string, PlanChoice>(planChoices, InventoryPaths.Comparer);
+                try
+                {
+                    PlanRow[] result = await Task.Run(() => SortPlanning.Create(request.Files, request.Destination,
+                        request.Rule, request.Move, choices));
+                    if (activePlan != request || IsDisposed)
+                        continue;
+                    planRows = result;
+                    RememberConflictChoices(result);
+                    RenderSortPlan();
+                }
+                catch (Exception error) when (error is ArgumentException or IOException or UnauthorizedAccessException)
+                {
+                    if (activePlan != request || IsDisposed)
+                        continue;
+                    ClearSortPlan();
+                    planStatus.Text = error.Message;
+                }
+                break;
             }
         }
         finally
@@ -287,13 +316,68 @@ internal sealed partial class InventoryForm
         }
     }
 
+    private void RememberConflictChoices(IEnumerable<PlanRow> result)
+    {
+        foreach (PlanRow row in result)
+        {
+            if (!planChoices.TryGetValue(row.Source.Path, out PlanChoice? choice) || choice.Collision == CollisionAction.Pending)
+                continue;
+            if (row.Replace)
+                planChoices[row.Source.Path] = choice with { ExpectedReplacement = row.Replacement };
+            else if (row.ConflictTarget is not null && !row.NeedsAttention && !row.Excluded
+                && choice.Collision is CollisionAction.KeepBoth or CollisionAction.Affixes)
+                planChoices[row.Source.Path] = choice with { ResolvedTarget = row.Target };
+            else if (row.IsOpenConflict && choice.Collision == CollisionAction.Replace && choice.ExpectedReplacement is null)
+                planChoices[row.Source.Path] = choice with { Collision = CollisionAction.Pending, ConflictTarget = null };
+        }
+    }
+
+    private void RenderSortPlan()
+    {
+        if (activePlan is not { } request || planRows.Length == 0)
+            return;
+        var selected = SelectedPlanRows().Select(row => row.Source.Path).ToHashSet(InventoryPaths.Comparer);
+        int blocked = planRows.Count(row => row.NeedsAttention);
+        int excluded = planRows.Count(row => row.Excluded);
+        planGrid.Rows.Clear();
+        planGrid.Columns[6].Visible = request.CollectionEvidence is not null;
+        showPlanIssues.Text = $"Offen oder blockiert ({blocked:N0})";
+        foreach (PlanRow row in planRows.Where(row => !showPlanIssues.Checked || row.NeedsAttention))
+        {
+            string evidence = request.CollectionEvidence?.GetValueOrDefault(row.Source.Path) ?? "";
+            int index = planGrid.Rows.Add(row.Source.Name, Path.GetFileName(row.Target), Path.GetDirectoryName(row.Target) ?? "",
+                row.Group, row.Action, row.Details, evidence);
+            DataGridViewRow item = planGrid.Rows[index];
+            item.Tag = row;
+            item.Cells[0].ToolTipText = $"{row.Source.Path}\n{InventoryLabels.Size(row.Source.Bytes)} · geändert {row.Source.ModifiedUtc.ToLocalTime():g}";
+            item.Cells[1].ToolTipText = row.Target;
+            item.Cells[2].ToolTipText = row.Target;
+            item.Cells[5].ToolTipText = row.Details;
+            item.Cells[6].ToolTipText = evidence;
+            if (row.NeedsAttention)
+                item.Cells[4].Style.ForeColor = Color.Maroon;
+        }
+        planGrid.ClearSelection();
+        foreach (DataGridViewRow item in planGrid.Rows)
+        {
+            if (item.Tag is PlanRow row && selected.Contains(row.Source.Path))
+                item.Selected = true;
+        }
+        string view = showPlanIssues.Checked ? " · Nur offene oder blockierte Zeilen sichtbar" : "";
+        planStatus.Text = $"Vorschau · {planRows.Length - blocked - excluded:N0} geplant · {blocked:N0} offen oder blockiert · {excluded:N0} übersprungen{view}";
+        UpdateSortPlanActions();
+    }
+
     private PlanRow[] SelectedPlanRows() => planGrid.SelectedRows.Cast<DataGridViewRow>()
         .Select(row => row.Tag).OfType<PlanRow>().ToArray();
 
     private Task ChangePlanRowsAsync(IEnumerable<PlanRow> rows, Func<PlanChoice, PlanChoice> update)
+        => ChangePlanRowsAsync(rows, (_, choice) => update(choice));
+
+    private Task ChangePlanRowsAsync(IEnumerable<PlanRow> rows, Func<PlanRow, PlanChoice, PlanChoice> update)
     {
         foreach (PlanRow row in rows)
-            planChoices[row.Source.Path] = update(planChoices.GetValueOrDefault(row.Source.Path) ?? new PlanChoice());
+            planChoices[row.Source.Path] = update(row, planChoices.GetValueOrDefault(row.Source.Path) ?? new PlanChoice());
         return RefreshSortPreviewAsync();
     }
 
@@ -321,7 +405,8 @@ internal sealed partial class InventoryForm
         if (dialog.ShowDialog(this) == DialogResult.OK)
             await ChangePlanRowsAsync(selection, choice => choice with
             {
-                Folder = folder.Text.Trim(), Collision = CollisionAction.Pending
+                Folder = folder.Text.Trim(), Collision = CollisionAction.Pending,
+                ConflictTarget = null, ResolvedTarget = null, ExpectedReplacement = null
             });
     }
 
@@ -335,9 +420,10 @@ internal sealed partial class InventoryForm
         }
         string prefix = resolvePrefix.Text;
         string suffix = resolveSuffix.Text;
-        return ChangePlanRowsAsync(rows.Where(row => row.Collision), choice => choice with
+        return ChangePlanRowsAsync(rows.Where(row => row.Collision), (row, choice) => choice with
         {
-            Collision = action, Prefix = prefix, Suffix = suffix
+            Collision = action, Prefix = prefix, Suffix = suffix, ConflictTarget = row.ConflictTarget,
+            ResolvedTarget = null, ExpectedReplacement = action == CollisionAction.Replace ? row.Replacement : null
         });
     }
 
@@ -347,6 +433,8 @@ internal sealed partial class InventoryForm
         planChoices.Clear();
         planRows = [];
         planGrid.Rows.Clear();
+        showPlanIssues.Checked = false;
+        showPlanIssues.Text = "Offen oder blockiert (0)";
         planGrid.Columns[6].Visible = planScope.SelectedIndex == CollectedPlanScope;
         planStatus.Text = "Wähle Ziel und Sortierkriterien für die Vorschau.";
         UpdateSortPlanActions();
@@ -359,15 +447,21 @@ internal sealed partial class InventoryForm
         bool hasSource = planScope.SelectedIndex == CollectedPlanScope
             ? collectedFiles.Count > 0 && !importingExplorerFiles : allFiles.Any(IsPresent);
         previewPlan.Enabled = !buildingPlan && !fileRunBusy && scanning is null && hasSource;
-        executePlan.Enabled = usable && scanning is null && duplicateRun is null && nameRun is null && planRows.Any(row => !row.Excluded);
+        previewPlan.Text = activePlan is null ? "Vorschau erstellen" : "Vorschau aktualisieren";
+        executePlan.Enabled = usable && scanning is null && duplicateRun is null && nameRun is null
+            && (planScope.SelectedIndex != CollectedPlanScope || !importingExplorerFiles)
+            && planRows.Any(row => !row.Excluded) && !planRows.Any(row => row.NeedsAttention);
+        showPlanIssues.Enabled = usable && planRows.Length > 0;
         changePlanFolder.Enabled = selected.Any(row => !row.Excluded);
         excludeRows.Enabled = selected.Any(row => !row.Excluded);
         includeRows.Enabled = selected.Any(row => row.Excluded);
         resolveSelected.Enabled = selected.Any(row => row.Collision);
-        resolveAll.Enabled = usable && planRows.Any(row => row.Collision);
+        resolveAll.Enabled = usable && planRows.Any(row => row.IsOpenConflict);
         resolvePrefix.Enabled = resolveSuffix.Enabled = !buildingPlan && resolveAction.SelectedIndex == 3;
-        planDate.Enabled = planMissingDate.Enabled = planCriteria[1].Checked;
-        planPattern.Enabled = planCriteria[3].Checked;
-        planFuzzyNames.Enabled = planCriteria[4].Checked;
+        foreach (CheckBox criterion in planCriteria)
+            criterion.Enabled = !directDestination.Checked;
+        planDate.Enabled = planMissingDate.Enabled = !directDestination.Checked && planCriteria[1].Checked;
+        planPattern.Enabled = !directDestination.Checked && planCriteria[3].Checked;
+        planFuzzyNames.Enabled = !directDestination.Checked && planCriteria[4].Checked;
     }
 }

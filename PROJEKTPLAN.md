@@ -19,16 +19,17 @@ Der Filesize-Checker ist ein lokales Windows-Tool der CheckTools-Reihe. Er erfas
 ### Sortierregeln und einfache Namensähnlichkeit
 
 - Speichern und kombinieren lassen sich Regeln nach Dateityp, Datum, Größe, Namensmuster und verfügbaren Metadaten. Bei Datumsregeln sind Datumsquelle und Ausweichregel für fehlende Angaben erkennbar. Regeln lassen sich auf die aktuelle Auswahl oder den gesamten Bestand anwenden.
+- **Direkt in den Zielordner** legt Dateien beim Kopieren oder Verschieben ohne automatisch erzeugte Unterordner ab. Vorschau, Namenskollisionen, Vorabprüfung und Freigabe gelten auch für die direkte Ablage.
 - Einfache Namensähnlichkeit ist bereits in Version 1 ein Sortierkriterium. Das Tool erkennt übliche Trennzeichen und eindeutige Kopier- oder Versionszusätze. Es schlägt beispielsweise für `Modell.safetensors`, `Modell (1).safetensors` und `Modell_v2.safetensors` einen gemeinsamen Zielordner vor. Der Sortierplan zeigt den erkannten Bezug. Dateien lassen sich einzeln aus der Gruppe nehmen und Zielordner ändern.
 - Standardansichten sind **Inventar**, **Duplikate** und **Sortierplan**. Der Sortierplan zeigt für jede Datei Quelle, endgültiges Ziel und die geplante Aktion. Die Ausführung beginnt nach Freigabe des Plans.
 
 ### Dateien für den Sortierplan sammeln
 
-Eine feste Ablage unter den Ergebnislisten nimmt markierte Dateizeilen, vollständige Duplikat- oder Namensgruppen und Dateien aus dem Windows-Explorer an. Mehrfach hinzugefügte Pfade erscheinen einmal mit ihren jeweiligen Befunden. In der Sammlung lassen sich Einträge entfernen, bevor sie als eigener Quellbereich in den Sortierplan übernommen werden. Das Ablegen und Übernehmen sammelt Verweise. Dateiaktionen erfolgen erst über die Vorschau, Vorabprüfung und Freigabe des Plans.
+Eine feste Ablage unter den Ergebnislisten nimmt markierte Dateizeilen, vollständige Duplikat- oder Namensgruppen und Dateien aus dem Windows-Explorer an. Mehrfach hinzugefügte Pfade erscheinen einmal mit ihren jeweiligen Befunden. Beim Weitersammeln oder Entfernen von Einträgen aktualisiert sich die Vorschau der Sammlung. Ausschlüsse, eigene Ziele und weiterhin gültige Konfliktentscheidungen für bestehende Dateien bleiben erhalten. Das Ablegen und Übernehmen sammelt Verweise. Dateiaktionen erfolgen erst über die Vorschau, Vorabprüfung und Freigabe des Plans.
 
 ### Namenskollisionen
 
-Die Vorschau erkennt vorhandene Zieldateien und Kollisionen zwischen Einträgen desselben Plans. Sie zeigt für Quelle und Ziel Pfad, Größe und Änderungsdatum. Die Aktionen gelten je Konflikt oder für alle ausgewählten Konflikte.
+Die Vorschau erkennt vorhandene Zieldateien und Kollisionen zwischen Einträgen desselben Plans. Sie zeigt für Quelle und Ziel Pfad, Größe und Änderungsdatum. Der Filter **Offen oder blockiert** zeigt die noch zu klärenden Einträge. Konfliktaktionen gelten für die markierten Konflikte oder gesammelt für alle offenen Namenskonflikte. Offene oder blockierte Einträge müssen vor der Freigabe geklärt oder ausgeschlossen werden.
 
 | Aktion | Verhalten |
 | --- | --- |

@@ -147,7 +147,7 @@ internal sealed partial class InventoryForm
         if (IsInternalCollectionDrag(args.Data) && internalCollectionDrag is { } items)
         {
             args.Effect = DragDropEffects.Copy;
-            AddToCollection(items);
+            await AddToCollectionAsync(items);
             return;
         }
 
@@ -184,7 +184,7 @@ internal sealed partial class InventoryForm
                     1 => " · 1 Pfad nicht erreichbar",
                     _ => $" · {imported.Issues.Count:N0} Pfade nicht erreichbar"
                 };
-                AddToCollection(imported.Files, folders + issues);
+                await AddToCollectionAsync(imported.Files, folders + issues);
             }
         }
         finally
@@ -198,19 +198,19 @@ internal sealed partial class InventoryForm
         }
     }
 
-    private void AddToCollection(CollectionInput[] entries, string feedback = "")
+    private async Task AddToCollectionAsync(CollectionInput[] entries, string feedback = "")
     {
         HashSet<string> artifacts = CurrentRunArtifacts();
         CollectionInput[] eligible = entries.Where(entry => !artifacts.Contains(entry.File.Path)).ToArray();
         (int added, bool changed) = collectedFiles.Add(eligible);
-        if (changed && planScope.SelectedIndex == CollectedPlanScope)
-            ClearSortPlan();
         string addedMessage = added > 0 ? $"{added:N0} hinzugefügt" : changed ? "Befunde ergänzt" : "";
         if (entries.Length > eligible.Length)
             feedback += $" · {entries.Length - eligible.Length:N0} App-Sicherungen oder temporäre Dateien übersprungen";
         SetCollectionMessage((addedMessage + feedback).Trim(' ', '·'));
         UpdateCollectionActions();
         UpdateSortPlanActions();
+        if (changed)
+            await UpdateCollectedSortPlanAsync();
     }
 
     private void SetCollectionMessage(string message)
@@ -234,7 +234,7 @@ internal sealed partial class InventoryForm
         ((TabControl)sortPlanTab.Parent!).SelectedTab = sortPlanTab;
         planScope.SelectedIndex = CollectedPlanScope;
         if (activePlan is null)
-            planStatus.Text = $"{collectedFiles.Count:N0} gesammelte Dateien · Ziel und Sortierkriterien wählen.";
+            planStatus.Text = $"{collectedFiles.Count:N0} gesammelte Dateien · Ziel und Ablageart wählen.";
         planDestination.Focus();
     }
 
@@ -265,16 +265,16 @@ internal sealed partial class InventoryForm
 
         dialog.Shown += (_, _) => grid.ClearSelection();
         grid.SelectionChanged += (_, _) => remove.Enabled = grid.SelectedRows.Count > 0;
-        remove.Click += (_, _) =>
+        remove.Click += async (_, _) =>
         {
             string[] selection = grid.SelectedRows.Cast<DataGridViewRow>().Select(row => row.Tag).OfType<string>().ToArray();
             int removed = collectedFiles.Remove(selection);
-            if (removed > 0 && planScope.SelectedIndex == CollectedPlanScope)
-                ClearSortPlan();
             SetCollectionMessage(removed > 0 ? $"{removed:N0} entfernt" : "");
             UpdateCollectionActions();
             UpdateSortPlanActions();
             FillRows();
+            if (removed > 0)
+                await UpdateCollectedSortPlanAsync();
         };
         FillRows();
         if (dialog.ShowDialog(this) == DialogResult.OK)

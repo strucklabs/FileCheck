@@ -172,7 +172,9 @@ internal sealed partial class InventoryForm
 
     private async Task ApprovePlanAsync()
     {
-        if (fileRunBusy || nameRun is not null || activePlan is not { } request || planRows.Length == 0)
+        if (fileRunBusy || buildingPlan || nameRun is not null || activePlan is not { } request
+            || (request.CollectionEvidence is not null && importingExplorerFiles)
+            || !planRows.Any(row => !row.Excluded) || planRows.Any(row => row.NeedsAttention))
             return;
         PlanRow[] approvedRows = planRows;
         FileRunPreflight preflight;
