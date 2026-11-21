@@ -54,7 +54,7 @@ internal sealed partial class InventoryForm : Form
     public InventoryForm(InventoryStore store)
     {
         this.store = store;
-        Text = "Filesize-Checker";
+        Text = "FileCheck";
         Font = new Font("Segoe UI", 9.5f);
         ForeColor = Ink;
         BackColor = Surface;
@@ -86,7 +86,7 @@ internal sealed partial class InventoryForm : Form
         };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        var title = CreateLabel("Filesize-Checker", Ink);
+        var title = CreateLabel("FileCheck", Ink);
         title.Font = new Font(Font.FontFamily, 20f, FontStyle.Bold);
         title.Margin = new Padding(0);
         header.Controls.Add(title, 0, 0);

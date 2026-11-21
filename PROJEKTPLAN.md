@@ -1,6 +1,6 @@
-# Filesize-Checker Funktionsplan
+# FileCheck Funktionsplan
 
-Der Filesize-Checker ist ein lokales Windows-Tool der CheckTools-Reihe. Er erfasst Dateibestände, zeigt Speicherverbrauch und Änderungen, findet exakte Kopien und hilft, Dateien nach nachvollziehbaren Regeln auf der Festplatte zu organisieren. Als technischer Rahmen dient C# mit .NET 10 und Windows Forms wie bei WinCheck.
+FileCheck ist ein lokales Windows-Tool der CheckTools-Reihe. Es erfasst Dateibestände, zeigt Speicherverbrauch und Änderungen, findet exakte Kopien und hilft, Dateien nach nachvollziehbaren Regeln auf der Festplatte zu organisieren. Als technischer Rahmen dient C# mit .NET 10 und Windows Forms wie bei WinCheck.
 
 ## Version 1
 

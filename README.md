@@ -1,6 +1,6 @@
-# Filesize-Checker
+# FileCheck
 
-Der Filesize-Checker ist ein lokales Windows-Werkzeug der CheckTools-Reihe. Er erfasst Dateibestände, zeigt Speicherverbrauch und Änderungen, findet Kopien und erstellt nachvollziehbare Sortierpläne. Die Anwendung ist in Entwicklung. Der [Projektplan](PROJEKTPLAN.md) beschreibt Ausbau und Abnahmekriterien. Die dort genannten künftigen Funktionen gehören erst nach ihrer Umsetzung zum Programm.
+FileCheck ist ein lokales Windows-Werkzeug der CheckTools-Reihe. Es erfasst Dateibestände, zeigt Speicherverbrauch und Änderungen, findet Kopien und erstellt nachvollziehbare Sortierpläne. Die Anwendung ist in Entwicklung. Der [Projektplan](PROJEKTPLAN.md) beschreibt Ausbau und Abnahmekriterien. Die dort genannten künftigen Funktionen gehören erst nach ihrer Umsetzung zum Programm.
 
 ## Funktionen
 
@@ -16,9 +16,9 @@ Der Filesize-Checker ist ein lokales Windows-Werkzeug der CheckTools-Reihe. Er e
 Erforderlich sind Windows, das **.NET-10-SDK** für den Build und die **.NET Desktop Runtime 10** zum Start eines frameworkabhängigen Builds ohne SDK. Die NuGet-Pakete werden beim Wiederherstellen bezogen.
 
 ```powershell
-dotnet restore .\FilesizeChecker.csproj
-dotnet build .\FilesizeChecker.csproj -c Release --no-restore
-dotnet run --project .\FilesizeChecker.csproj -c Release --no-build
+dotnet restore .\FileCheck.csproj
+dotnet build .\FileCheck.csproj -c Release --no-restore
+dotnet run --project .\FileCheck.csproj -c Release --no-build
 ```
 
 Wähle im Tab **Inventar** mindestens einen Ordner und klicke auf **Scan starten**. Lege zum Ausprobieren einen separaten Testordner mit einigen synthetischen Dateien an. Für Schreibaktionen prüfst du anschließend unter **Sortierplan** Quelle, Ziel und Konfliktentscheidungen und bestätigst unter **Prüfen und ausführen …** den geprüften Plan.
@@ -37,11 +37,11 @@ Der Quellbaum enthält kein versioniertes automatisches Testprojekt. Ein reprodu
 | `PROJEKTPLAN.md`, `AGENTS.md` | Funktionsplan und Projektanweisungen |
 | `bin/`, `obj/` | Ignorierte Build-Ausgaben und lokale Prüfarbeitsstände. Ältere Varianten in diesen Ordnern sind lokale Zwischenstände. |
 
-Der Ordnername des Arbeitsverzeichnisses kann vom Projektnamen abweichen. Maßgeblich für den Build ist `FilesizeChecker.csproj`.
+Aus `FileCheck.csproj` entsteht der Windows-Startpunkt `FileCheck.exe`. Frühere Entwicklungsstände können den Namen Filesize-Checker tragen.
 
 ## Datenhaltung
 
-Die Anwendung speichert ihre Daten in `%LOCALAPPDATA%\CheckTools\FilesizeChecker\`. Dazu gehören `inventory.json` mit Dateipfaden und Metadaten, `duplicate-hashes.json` mit Inhaltsprüfdaten, `image-features-v1.json` und `image-exclusions-v1.json` für Bildbefunde, `sort-rules.json` für Regeln und `sort-runs\` mit Quell- und Zielpfaden sowie Wiederherstellungszuständen.
+FileCheck verwendet den lokalen Datenordner `%LOCALAPPDATA%\CheckTools\FilesizeChecker\` auch nach der Umbenennung weiter. Dazu gehören `inventory.json` mit Dateipfaden und Metadaten, `duplicate-hashes.json` mit Inhaltsprüfdaten, `image-features-v1.json` und `image-exclusions-v1.json` für Bildbefunde, `sort-rules.json` für Regeln und `sort-runs\` mit Quell- und Zielpfaden sowie Wiederherstellungszuständen.
 
 CSV-Exporte liegen am beim Export gewählten Ort. Dateivorgänge können neben dem Ziel temporäre Dateien und Sicherungen mit dem Präfix `.filesize-checker-` ablegen. Verwende **Sortierläufe → Sicherungen freigeben …**, um nicht mehr benötigte Sicherungen nach Prüfung der Folgen zu entfernen. Schließe die Anwendung vor dem Löschen lokaler Inventar- oder Cache-Dateien. Entferne Laufprotokolle und Sicherungen erst, wenn offene Vorgänge geklärt sind und du die betreffenden Läufe nicht mehr rückgängig machen willst. CSV-Exporte löschst du am gewählten Speicherort.
 
@@ -56,7 +56,7 @@ Scans, Dateiinhalte, Vergleiche und Vorschauen verarbeitet die Anwendung lokal. 
 
 ## Lizenz und Drittanbieter
 
-Für den Filesize-Checker selbst ist im Repository bisher keine Projektlizenz festgelegt. Eine Lizenzfreigabe zur Weiterverwendung des Projektcodes ist damit nicht dokumentiert.
+Für FileCheck ist im Repository bisher keine Projektlizenz festgelegt. Eine Lizenzfreigabe zur Weiterverwendung des Projektcodes ist damit nicht dokumentiert.
 
 - **PdfPig 0.1.16** für PDF-Metadaten und PDF-Text, Apache-2.0. [NuGet-Paket](https://www.nuget.org/packages/PdfPig/0.1.16)
 - **SkiaSharp 3.119.4** für Bildverarbeitung, MIT. [NuGet-Paket](https://www.nuget.org/packages/SkiaSharp/3.119.4)

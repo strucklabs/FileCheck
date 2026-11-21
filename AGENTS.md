@@ -1,6 +1,6 @@
-# Projektanweisung für den Filesize-Checker
+# Projektanweisung für FileCheck
 
-Entwickle den Filesize-Checker als lokales Windows-Tool der CheckTools-Reihe. Der [Funktionsplan](PROJEKTPLAN.md) legt Umfang, Ausbaustufen und Abnahmekriterien fest. Aktualisiere ihn, wenn sich eine Produktentscheidung ändert.
+Entwickle FileCheck als lokales Windows-Tool der CheckTools-Reihe. Der [Funktionsplan](PROJEKTPLAN.md) legt Umfang, Ausbaustufen und Abnahmekriterien fest. Aktualisiere ihn, wenn sich eine Produktentscheidung ändert.
 
 ## Umsetzung
 

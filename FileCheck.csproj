@@ -5,10 +5,12 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>FilesizeChecker</AssemblyName>
+    <AssemblyName>FileCheck</AssemblyName>
+    <RootNamespace>FilesizeChecker</RootNamespace>
+    <Product>FileCheck</Product>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <PathMap>$(MSBuildProjectDirectory)=/_/FilesizeChecker</PathMap>
+    <PathMap>$(MSBuildProjectDirectory)=/_/FileCheck</PathMap>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="PdfPig" Version="0.1.16" />

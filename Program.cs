@@ -11,7 +11,7 @@ internal static class Program
         using var instance = new Mutex(true, @"Local\CheckTools.FilesizeChecker", out bool firstInstance);
         if (!firstInstance)
         {
-            MessageBox.Show("Der Filesize-Checker ist bereits geöffnet.", "Filesize-Checker");
+            MessageBox.Show("FileCheck ist bereits geöffnet.", "FileCheck");
             return;
         }
 
