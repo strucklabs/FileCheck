@@ -8,10 +8,13 @@ internal sealed partial class InventoryForm : Form
     private static readonly Color Ink = Color.FromArgb(24, 38, 50);
     private static readonly Color Muted = Color.FromArgb(75, 91, 105);
     private static readonly Color Surface = Color.FromArgb(243, 246, 249);
-    private static readonly Color Accent = Color.FromArgb(20, 88, 113);
+    private static readonly Color Accent = FileCheckTheme.Accent;
 
     private readonly InventoryStore store;
-    private readonly ListBox roots = new() { Dock = DockStyle.Fill, IntegralHeight = false };
+    private readonly ListBox roots = new()
+    {
+        Dock = DockStyle.Fill, IntegralHeight = false, SelectionMode = SelectionMode.MultiExtended
+    };
     private readonly Button addRoot = CreateButton("Ordner hinzufügen");
     private readonly Button removeRoot = CreateButton("Entfernen");
     private readonly Button scan = CreateButton("Scan starten", primary: true);
@@ -71,12 +74,12 @@ internal sealed partial class InventoryForm : Form
 
     private void BuildLayout()
     {
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(0, 0, 0, 4) };
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 73));
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         Controls.Add(layout);
 
         var header = new TableLayoutPanel
@@ -132,7 +135,7 @@ internal sealed partial class InventoryForm : Form
         var filterBar = new TableLayoutPanel
         {
             AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Fill,
-            ColumnCount = 2, RowCount = 1, BackColor = DropIdle, Margin = new Padding(3, 2, 3, 5)
+            ColumnCount = 2, RowCount = 1, BackColor = Surface, Margin = new Padding(3, 2, 3, 5)
         };
         filterBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         filterBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -178,6 +181,7 @@ internal sealed partial class InventoryForm : Form
         tabControl.TabPages.Add(BuildDuplicateTab());
         tabControl.TabPages.Add(BuildNameComparisonTab());
         tabControl.TabPages.Add(BuildImageComparisonTab());
+        tabControl.TabPages.Add(BuildVideoComparisonTab());
         tabControl.TabPages.Add(BuildSortPlanTab());
         tabControl.TabPages.Add(BuildFileRunTab());
 
@@ -217,9 +221,20 @@ internal sealed partial class InventoryForm : Form
         AddColumn(issues, "Hinweis", 290, fill: true);
     }
 
+    private void FitMainWindow(Rectangle area)
+    {
+        MinimumSize = new Size(Math.Min(MinimumSize.Width, area.Width), Math.Min(MinimumSize.Height, area.Height));
+        int width = Math.Min(Width, area.Width);
+        int height = Math.Min(Height, area.Height);
+        int x = Math.Clamp(Left, area.Left, area.Right - width);
+        int y = Math.Clamp(Top, area.Top, area.Bottom - height);
+        SetBounds(x, y, width, height);
+    }
+
     private void WireEvents()
     {
         WireCollectionSources();
+        Load += (_, _) => FitMainWindow(Screen.FromControl(this).WorkingArea);
         Shown += (_, _) =>
         {
             LoadFileRuns();
@@ -228,24 +243,39 @@ internal sealed partial class InventoryForm : Form
         };
         FormClosing += (_, args) =>
         {
-            if (scanning is null && duplicateRun is null && nameRun is null && imageRun is null && !fileRunBusy)
+            if (scanning is null && duplicateRun is null && nameRun is null && imageRun is null && videoRun is null && !fileRunBusy)
                 return;
             scanning?.Cancel();
             duplicateRun?.Cancel();
             nameRun?.Cancel();
             imageRun?.Cancel();
+            videoRun?.Cancel();
             fileRunPause?.Cancel();
             args.Cancel = true;
             scanStatus.Text = "Die laufende Suche wird angehalten. Das Fenster kann danach geschlossen werden.";
         };
         addRoot.Click += (_, _) => AddRoot();
-        removeRoot.Click += (_, _) =>
+        removeRoot.Click += (_, _) => RemoveSelectedScanRoots();
+        roots.KeyDown += (_, args) =>
         {
-            if (roots.SelectedIndex >= 0)
-                roots.Items.RemoveAt(roots.SelectedIndex);
-            UpdateActions();
+            if (args.KeyData == Keys.Delete)
+            {
+                RemoveSelectedScanRoots();
+                args.SuppressKeyPress = true;
+            }
+            else if (args.KeyData == (Keys.Control | Keys.A))
+            {
+                roots.BeginUpdate();
+                try
+                {
+                    for (int index = 0; index < roots.Items.Count; index++)
+                        roots.SetSelected(index, true);
+                }
+                finally { roots.EndUpdate(); }
+                args.SuppressKeyPress = true;
+            }
         };
-        roots.SelectedIndexChanged += (_, _) => UpdateActions();
+        roots.SelectedIndexChanged += (_, _) => removeRoot.Enabled = roots.Enabled && roots.SelectedIndices.Count > 0;
         scan.Click += async (_, _) => await ScanAsync();
         cancel.Click += (_, _) =>
         {
@@ -366,15 +396,40 @@ internal sealed partial class InventoryForm : Form
             lastAdded = roots.Items.Add(selected);
         }
         if (lastAdded >= 0)
+        {
+            roots.ClearSelected();
             roots.SelectedIndex = lastAdded;
+        }
         UpdateActions();
         return skipped;
+    }
+
+    private void RemoveSelectedScanRoots()
+    {
+        if (!removeRoot.Enabled)
+            return;
+
+        int[] selected = roots.SelectedIndices.Cast<int>().OrderDescending().ToArray();
+        if (selected.Length == 0)
+            return;
+
+        roots.BeginUpdate();
+        try
+        {
+            foreach (int index in selected)
+                roots.Items.RemoveAt(index);
+            if (roots.Items.Count > 0)
+                roots.SelectedIndex = Math.Min(selected[^1], roots.Items.Count - 1);
+        }
+        finally { roots.EndUpdate(); }
+        roots.Focus();
+        UpdateActions();
     }
 
     private async Task ScanAsync()
     {
         var scanRoots = roots.Items.Cast<string>().ToArray();
-        if (scanRoots.Length == 0 || scanning is not null || duplicateRun is not null || nameRun is not null || imageRun is not null || fileRunBusy || !storeReadable)
+        if (scanRoots.Length == 0 || scanning is not null || duplicateRun is not null || nameRun is not null || imageRun is not null || videoRun is not null || fileRunBusy || !storeReadable)
             return;
 
         using var cancellation = new CancellationTokenSource();
@@ -449,6 +504,7 @@ internal sealed partial class InventoryForm : Form
         RefreshDuplicateSource();
         ClearNameComparison();
         ClearImageResults();
+        ClearVideoResults();
         ClearSortPlan();
         UpdateActions();
     }
@@ -616,7 +672,7 @@ internal sealed partial class InventoryForm : Form
 
     private void UpdateActions()
     {
-        bool idle = scanning is null && duplicateRun is null && nameRun is null && imageRun is null && !fileRunBusy;
+        bool idle = scanning is null && duplicateRun is null && nameRun is null && imageRun is null && videoRun is null && !fileRunBusy;
         addRoot.Enabled = idle;
         roots.Enabled = idle;
         removeRoot.Enabled = idle && roots.SelectedIndex >= 0;
@@ -628,6 +684,7 @@ internal sealed partial class InventoryForm : Form
         UpdateFileRunActions();
         UpdateNameActions();
         UpdateImageActions();
+        UpdateVideoActions();
         UpdateCollectionActions();
     }
 
@@ -676,33 +733,53 @@ internal sealed partial class InventoryForm : Form
             MinimumSize = new Size(0, 30), Margin = new Padding(2, 2, 6, 4)
         };
         UpdateStatusFilterAppearance(filter);
+        filter.EnabledChanged += (_, _) => UpdateStatusFilterAppearance(filter);
         return filter;
     }
 
     private static void UpdateStatusFilterAppearance(CheckBox filter)
     {
         bool highContrast = SystemInformation.HighContrast;
-        Color selected = highContrast ? SystemColors.Highlight : Accent;
+        Color selected = FileCheckTheme.SelectionBackground;
         Color idle = highContrast ? SystemColors.Window : Color.White;
-        filter.BackColor = filter.Checked ? selected : idle;
-        filter.ForeColor = filter.Checked
-            ? (highContrast ? SystemColors.HighlightText : Color.White)
+        bool active = filter.Enabled && filter.Checked;
+        filter.BackColor = active ? selected : idle;
+        filter.ForeColor = active
+            ? FileCheckTheme.SelectionForeground
             : (highContrast ? SystemColors.WindowText : Ink);
-        filter.FlatAppearance.BorderColor = filter.Checked ? selected
+        filter.FlatAppearance.BorderColor = active ? selected
             : (highContrast ? SystemColors.WindowText : Color.FromArgb(166, 184, 197));
-        filter.FlatAppearance.CheckedBackColor = selected;
+        filter.FlatAppearance.CheckedBackColor = filter.Enabled ? selected : idle;
         filter.FlatAppearance.MouseOverBackColor = highContrast ? filter.BackColor
-            : filter.Checked ? Color.FromArgb(16, 73, 96) : Surface;
+            : active ? Color.FromArgb(16, 73, 96) : Surface;
         filter.FlatAppearance.MouseDownBackColor = filter.FlatAppearance.MouseOverBackColor;
     }
 
     private static Button CreateButton(string text, bool primary = false)
     {
         var button = new Button { Text = text, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Padding = new Padding(8, 2, 8, 2), FlatStyle = FlatStyle.Flat, BackColor = primary ? Accent : Color.White,
-            ForeColor = primary ? Color.White : Ink, Margin = new Padding(2, 2, 6, 2) };
-        button.FlatAppearance.BorderColor = primary ? Accent : Color.FromArgb(209, 219, 227);
+            Padding = new Padding(8, 2, 8, 2), FlatStyle = FlatStyle.Flat, BackColor = Color.White,
+            ForeColor = Ink, UseVisualStyleBackColor = false, Margin = new Padding(2, 2, 6, 2) };
+        button.FlatAppearance.BorderColor = Color.FromArgb(209, 219, 227);
+        if (primary)
+        {
+            button.EnabledChanged += (_, _) => ApplyPrimaryColors();
+            ApplyPrimaryColors();
+        }
         return button;
+
+        void ApplyPrimaryColors()
+        {
+            bool highContrast = SystemInformation.HighContrast;
+            button.BackColor = button.Enabled ? FileCheckTheme.SelectionBackground
+                : (highContrast ? SystemColors.Control : Surface);
+            button.ForeColor = button.Enabled ? FileCheckTheme.SelectionForeground
+                : (highContrast ? SystemColors.GrayText : Muted);
+            button.FlatAppearance.BorderColor = button.BackColor;
+            button.FlatAppearance.MouseOverBackColor = button.Enabled && !highContrast
+                ? Color.FromArgb(16, 73, 96) : button.BackColor;
+            button.FlatAppearance.MouseDownBackColor = button.FlatAppearance.MouseOverBackColor;
+        }
     }
 
     private static ComboBox CreateDropdown(int width) => new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = width };
@@ -725,9 +802,11 @@ internal sealed partial class InventoryForm : Form
         BackgroundColor = Color.White, BorderStyle = BorderStyle.FixedSingle, GridColor = Color.FromArgb(229, 235, 241),
         EnableHeadersVisualStyles = false, ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
         ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Surface, ForeColor = Ink,
+            SelectionBackColor = FileCheckTheme.SelectionBackground, SelectionForeColor = FileCheckTheme.SelectionForeground,
             Padding = new Padding(4) },
-        DefaultCellStyle = new DataGridViewCellStyle { ForeColor = Ink, SelectionBackColor = Color.FromArgb(210, 233, 242),
-            SelectionForeColor = Ink, Padding = new Padding(4, 0, 4, 0) },
+        DefaultCellStyle = new DataGridViewCellStyle { ForeColor = Ink,
+            SelectionBackColor = FileCheckTheme.SelectionBackground, SelectionForeColor = FileCheckTheme.SelectionForeground,
+            Padding = new Padding(4, 0, 4, 0) },
         AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(249, 251, 253) },
         RowTemplate = new DataGridViewRow { Height = 27 }
     };

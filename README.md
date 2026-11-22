@@ -8,6 +8,7 @@ FileCheck ist ein lokales Windows-Werkzeug der CheckTools-Reihe. Es erfasst Date
 - **Duplikate** prüft Kandidaten nach Dateigröße, Stichproben bei großen Dateien, SHA-256 und Bytevergleich. Bestätigte Kopien haben denselben Inhalt. Bei der Schätzung des freigebbaren Speichers berücksichtigt die Anwendung Hardlinks. Die Prüfung hat Fortschrittsanzeige, Pause, Abbruch und eine Option zur Neuberechnung.
 - **Namen und Versionen** findet Namensfamilien anhand erkennbarer Kopier- und Versionszusätze und prüft interne Versionsangaben bei ausgewählten Formaten. Für unterstützte Text-, Office-, OpenDocument- und PDF-Dateien kann die Ansicht auslesbare Inhalte vergleichen.
 - **Bildvergleich** zeigt pixelgleiche und visuell ähnliche JPEG-, PNG- und WebP-Einzelbilder. Möglich sind Direktvergleich, Referenzsuche und Gruppensuche. Fehlzuordnungen lassen sich für unveränderte Bilder ausblenden.
+- **Videovergleich** gruppiert mögliche Duplikate unter den MP4-Videos der ausgewählten Scan-Ordner. Alle Dateien einer Gruppe haben dieselbe Bytezahl. Zwischen dem kürzesten und längsten Video liegt höchstens eine Sekunde. Jede Datei gehört höchstens einer Gruppe an. Für mindestens zwei markierte Videos zeigt **Exakte Kopien prüfen** die bytegleichen Gruppen. **Inhalt vergleichen** zeigt Anfang, Mitte und Ende aller markierten Videos in einer horizontal scrollbaren Vorschau mit fester Referenz. Unter jedem Vergleichsvideo lässt sich die Sichtentscheidung für die Sitzung festhalten. Referenzen und Treffer lassen sich filtern, Treffer ausschließen und sichtbare Dateien für den Sortierplan sammeln. Vorschaubilder werden bei Bedarf geladen.
 - **Sammlung und Sortierplan** übernehmen ausgewählte Dateien per Kontextmenü oder Drag-and-drop. Die Vorschau zeigt das endgültige Ziel und die geplante Aktion je Datei. Namenskonflikte lassen sich überspringen, ersetzen, nummerieren oder mit Präfix und Suffix lösen. Nach Vorabprüfung und Freigabe kann der Plan kopieren oder verschieben.
 - **Sortierläufe** zeigen den Zustand ausgeführter Aktionen und unterstützen Fortsetzen, Rückgängig und die Freigabe von Sicherungen. Rückgängig setzt prüfbare Pfade und die benötigten Sicherungen voraus.
 
@@ -23,9 +24,13 @@ dotnet run --project .\FileCheck.csproj -c Release --no-build
 
 Wähle im Tab **Inventar** mindestens einen Ordner und klicke auf **Scan starten**. Lege zum Ausprobieren einen separaten Testordner mit einigen synthetischen Dateien an. Für Schreibaktionen prüfst du anschließend unter **Sortierplan** Quelle, Ziel und Konfliktentscheidungen und bestätigst unter **Prüfen und ausführen …** den geprüften Plan.
 
+In der Scan-Ordnerliste lassen sich mehrere Einträge mit **Strg** oder **Umschalt** markieren. **Strg+A** markiert alle. **Entfernen** oder **Entf** nimmt die markierten Ordner aus der Scan-Auswahl.
+
 ## Prüfung
 
 Der Quellbaum enthält kein versioniertes automatisches Testprojekt. Ein reproduzierbarer manueller Kurztest ist ein erster Scan eines Testordners, gefolgt von je einer hinzugefügten, veränderten und entfernten Beispieldatei und einem zweiten Scan. Ergänze zwei bytegleiche Dateien und eine gleich große Datei mit anderem Inhalt, um die Duplikatsuche zu prüfen. Verwende für Vorabprüfung, Kopieren, Verschieben, Ersetzen und Rückgängig einen entbehrlichen Testbestand. Weitere Abnahmeszenarien stehen im [Projektplan](PROJEKTPLAN.md).
+
+Für einen Kurztest des Videovergleichs verwende synthetische MP4-Videos gleicher Bytezahl mit Laufzeitunterschieden von genau einer und mehr als einer Sekunde. Ergänze eine Datei, die sich bei gleicher Laufzeit um ein Byte unterscheidet. Markiere anschließend mindestens drei Videos mit bytegleichen und inhaltlich abweichenden Dateien. Prüfe die Gruppen exakter Kopien, die drei Vorschaubilder je Datei und die getrennten Sichtentscheidungen der Vergleichspaare.
 
 ## Struktur
 
@@ -43,6 +48,8 @@ Aus `FileCheck.csproj` entsteht der Windows-Startpunkt `FileCheck.exe`. Frühere
 
 FileCheck verwendet den lokalen Datenordner `%LOCALAPPDATA%\CheckTools\FilesizeChecker\` auch nach der Umbenennung weiter. Dazu gehören `inventory.json` mit Dateipfaden und Metadaten, `duplicate-hashes.json` mit Inhaltsprüfdaten, `image-features-v1.json` und `image-exclusions-v1.json` für Bildbefunde, `sort-rules.json` für Regeln und `sort-runs\` mit Quell- und Zielpfaden sowie Wiederherstellungszuständen.
 
+Die Videogruppen und Vorschauen bleiben im Arbeitsspeicher. `video-metadata-exclusions-v1.json` speichert ausgeschlossene Paare anhand von Pfaden, Dateigrößen, Zeitstempeln und Laufzeiten. Ältere Stände können `video-features-v3.json`, `video-quick-features-v1.json`, `video-exclusions-v1.json` und `video-quick-exclusions-v1.json` hinterlassen. Bei geschlossener Anwendung lassen sich diese Prüfdaten aus dem lokalen Datenordner löschen.
+
 CSV-Exporte liegen am beim Export gewählten Ort. Dateivorgänge können neben dem Ziel temporäre Dateien und Sicherungen mit dem Präfix `.filesize-checker-` ablegen. Verwende **Sortierläufe → Sicherungen freigeben …**, um nicht mehr benötigte Sicherungen nach Prüfung der Folgen zu entfernen. Schließe die Anwendung vor dem Löschen lokaler Inventar- oder Cache-Dateien. Entferne Laufprotokolle und Sicherungen erst, wenn offene Vorgänge geklärt sind und du die betreffenden Läufe nicht mehr rückgängig machen willst. CSV-Exporte löschst du am gewählten Speicherort.
 
 Scans, Dateiinhalte, Vergleiche und Vorschauen verarbeitet die Anwendung lokal. Dateien können durch freigegebene Sortieraktionen geändert werden. Vor einer Weitergabe von Inventaren, Exporten, Laufprotokollen oder Screenshots sollte ihr Inhalt geprüft werden.
@@ -51,6 +58,7 @@ Scans, Dateiinhalte, Vergleiche und Vorschauen verarbeitet die Anwendung lokal. 
 
 - Unvollständige oder unerreichbare Scanbereiche behalten ihren letzten erfolgreich erfassten Stand. Der Scan meldet solche Bereiche in den Hinweisen.
 - Der Bildvergleich unterstützt JPEG, PNG und WebP bis 48 Megapixel. Animierte, defekte und zu große Dateien werden gesondert gemeldet. Visuelle Ähnlichkeit ist ein Hinweis mit möglichen Fehlzuordnungen.
+- Der Videovergleich verwendet die Spieldauer aus dem MP4-Container und die Dateigröße. Der Befund „Mögliches Duplikat“ beruht auf diesen Metadaten. Nicht lesbare Laufzeiten erscheinen in den Prüfhinweisen. Eine Vorschau setzt einen geeigneten Windows-Videodecoder voraus.
 - Dokumentvergleiche werten je nach Format bestimmte Inhalte aus. Bildbasierte PDFs benötigen OCR. Der eingebundene PDF-Vergleich liest vorhandenen Seitentext. Für Textdateien und extrahierten PDF-Text gilt eine Grenze von 12 MiB, für PDFs zusätzlich eine Grenze von 1.000 Seiten.
 - Vorabprüfung und Rückgängig hängen vom aktuellen Dateizustand, den Zugriffsrechten, dem Dateisystem und dem verfügbaren Speicher ab.
 

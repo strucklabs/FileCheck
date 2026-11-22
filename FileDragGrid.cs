@@ -14,6 +14,18 @@ internal sealed class FileDragGrid : DataGridView
     private Point dragStart;
     private CollectionInput[]? pendingDrag;
 
+    protected override void OnCellPainting(DataGridViewCellPaintingEventArgs e)
+    {
+        // WinForms highlights the current column in full-row selection without marking the header itself selected.
+        if (!EnableHeadersVisualStyles && e.RowIndex == -1 && e.ColumnIndex >= 0
+            && SelectionMode == DataGridViewSelectionMode.FullRowSelect
+            && CurrentCell is { Selected: true } cell && cell.ColumnIndex == e.ColumnIndex
+            && e.CellStyle is { } style)
+            style.ForeColor = style.SelectionForeColor;
+
+        base.OnCellPainting(e);
+    }
+
     protected override void OnMouseDown(MouseEventArgs e)
     {
         pendingDrag = null;

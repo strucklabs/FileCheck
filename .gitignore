@@ -21,6 +21,11 @@ inventory.json
 duplicate-hashes.json
 image-features-*.json
 image-exclusions-*.json
+video-features-*.json
+video-exclusions-*.json
+video-quick-features-*.json
+video-quick-exclusions-*.json
+video-metadata-exclusions-*.json
 sort-rules.json
 sort-runs/
 .filesize-checker-*

@@ -165,7 +165,7 @@ internal sealed partial class InventoryForm
         return tab;
     }
 
-    private bool ImageJobAvailable => scanning is null && duplicateRun is null && nameRun is null && imageRun is null && !fileRunBusy;
+    private bool ImageJobAvailable => scanning is null && duplicateRun is null && nameRun is null && imageRun is null && videoRun is null && !fileRunBusy;
 
     private void UpdateImageActions()
     {

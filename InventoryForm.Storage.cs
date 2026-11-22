@@ -37,7 +37,7 @@ internal sealed partial class InventoryForm
                 OpenStorageInventory(inventoryTab, selection);
         };
 
-        var menu = new ContextMenuStrip();
+        var menu = FileCheckTheme.CreateContextMenu();
         var showFiles = new ToolStripMenuItem("Dateien anzeigen");
         var collectGroup = new ToolStripMenuItem();
         menu.Items.AddRange([showFiles, collectGroup]);

@@ -9,8 +9,6 @@ internal sealed partial class InventoryForm
     private const string CollectionGripColumn = "CollectionGrip";
     private const string CollectionGrip = "≡";
     private const int CollectedPlanScope = 3;
-    private static readonly Color DropIdle = Color.FromArgb(230, 243, 247);
-    private static readonly Color DropHover = Color.FromArgb(198, 227, 236);
 
     private readonly FileCollection collectedFiles = new();
     private readonly Panel fileDrop = new() { Dock = DockStyle.Fill, Margin = new Padding(0), BorderStyle = BorderStyle.FixedSingle };
@@ -26,10 +24,11 @@ internal sealed partial class InventoryForm
     {
         var bar = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(20, 7, 20, 3)
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(20, 4, 20, 5)
         };
         bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         bar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        bar.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         var dropText = new TableLayoutPanel
         {
             Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Padding = new Padding(12, 5, 8, 3)
@@ -37,6 +36,8 @@ internal sealed partial class InventoryForm
         dropText.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         dropText.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         Label dropTitle = CreateLabel("Dateien hierher ziehen", Ink);
+        dropTitle.ForeColor = Color.Empty;
+        collectionStatus.ForeColor = Color.Empty;
         dropTitle.Font = new Font(Font, FontStyle.Bold);
         dropTitle.Margin = new Padding(0, 1, 0, 3);
         dropText.Controls.Add(dropTitle, 0, 0);
@@ -45,7 +46,7 @@ internal sealed partial class InventoryForm
         collectionStatus.Dock = DockStyle.Fill;
         collectionStatus.Margin = new Padding(0, 0, 4, 1);
         dropText.Controls.Add(collectionStatus, 0, 1);
-        fileDrop.BackColor = DropIdle;
+        SetCollectionDropAppearance(false);
         fileDrop.AccessibleName = "Dateisammlung für den Sortierplan";
         fileDrop.Controls.Add(dropText);
         bar.Controls.Add(fileDrop, 0, 0);
@@ -58,12 +59,21 @@ internal sealed partial class InventoryForm
             surface.AllowDrop = true;
             surface.DragEnter += OnCollectionDragOver;
             surface.DragOver += OnCollectionDragOver;
-            surface.DragLeave += (_, _) => fileDrop.BackColor = DropIdle;
+            surface.DragLeave += (_, _) => SetCollectionDropAppearance(false);
             surface.DragDrop += async (_, args) => await ReceiveCollectionDropAsync(args);
         }
         viewCollection.Click += (_, _) => ShowCollection();
         useCollection.Click += (_, _) => OpenCollectionPlan();
         return bar;
+    }
+
+    private void SetCollectionDropAppearance(bool active)
+    {
+        bool highContrast = SystemInformation.HighContrast;
+        fileDrop.BackColor = active ? FileCheckTheme.SelectionBackground
+            : (highContrast ? SystemColors.Window : Surface);
+        fileDrop.ForeColor = active ? FileCheckTheme.SelectionForeground
+            : (highContrast ? SystemColors.WindowText : Ink);
     }
 
     private void WireCollectionSources()
@@ -78,7 +88,9 @@ internal sealed partial class InventoryForm
             .OfType<NameMatch>().Select(member => NameDragItem(member, SelectedNameFamily?.Name)).ToArray();
         imageGroups.ResolveDrag = (row, _, _) => ImageGroupItems(imageGroups.Rows[row].Tag as ImageGroup);
         imageMembers.ResolveDrag = (_, _, selection) => ImageMemberItems(selection);
-        foreach (FileDragGrid grid in new[] { files, duplicateGrid, nameFamilies, nameMembers, imageGroups, imageMembers })
+        videoGroups.ResolveDrag = (row, _, _) => VideoGroupItems(videoGroups.Rows[row].Tag as VideoGroup);
+        videoMembers.ResolveDrag = (_, _, selection) => VideoMemberItems(selection);
+        foreach (FileDragGrid grid in new[] { files, duplicateGrid, nameFamilies, nameMembers, imageGroups, imageMembers, videoGroups, videoMembers })
             grid.StartFileDrag = entries => StartCollectionDrag(grid, entries);
 
         AddCollectionGrip(files, "Markierte Dateien zur Sammlung ziehen.");
@@ -87,6 +99,8 @@ internal sealed partial class InventoryForm
         AddCollectionGrip(nameMembers, "Markierte Dateien zur Sammlung ziehen.");
         AddCollectionGrip(imageGroups, "Sichtbare Bilder der Gruppe zur Sammlung ziehen.");
         AddCollectionGrip(imageMembers, "Markierte Bilder zur Sammlung ziehen.");
+        AddCollectionGrip(videoGroups, "Sichtbare Videos der Gruppe zur Sammlung ziehen.");
+        AddCollectionGrip(videoMembers, "Markierte Videos zur Sammlung ziehen.");
 
         WireCollectionMenu(files, (row, selection) => files.ResolveDrag!(row, 1, selection));
         WireCollectionMenu(duplicateGrid, (row, selection) => DuplicateDragItems(row, 1, selection),
@@ -99,6 +113,9 @@ internal sealed partial class InventoryForm
         WireCollectionMenu(imageMembers, (row, selection) => imageMembers.ResolveDrag!(row, 0, selection));
         WireImageReferenceMenu();
         WireInventoryImageCommands();
+        WireCollectionMenu(videoGroups, group: row => VideoGroupItems(videoGroups.Rows[row].Tag as VideoGroup),
+            groupText: "Sichtbare Videos der Gruppe sammeln");
+        WireCollectionMenu(videoMembers, (row, selection) => VideoMemberItems(selection));
     }
 
     private static void AddCollectionGrip(FileDragGrid grid, string help)
@@ -147,7 +164,7 @@ internal sealed partial class InventoryForm
     private void WireCollectionMenu(FileDragGrid grid, Func<int, int[], CollectionInput[]>? selected = null,
         Func<int, CollectionInput[]>? group = null, string groupText = "Ganze Gruppe sammeln")
     {
-        var menu = new ContextMenuStrip();
+        var menu = FileCheckTheme.CreateContextMenu();
         var selectedItem = selected is null ? null : new ToolStripMenuItem("Markierte Dateien sammeln");
         var groupItem = group is null ? null : new ToolStripMenuItem(groupText);
         if (selectedItem is not null)
@@ -238,7 +255,7 @@ internal sealed partial class InventoryForm
         finally
         {
             internalCollectionDrag = null;
-            fileDrop.BackColor = DropIdle;
+            SetCollectionDropAppearance(false);
         }
     }
 
@@ -252,12 +269,12 @@ internal sealed partial class InventoryForm
         bool supported = CanAcceptCollectionDrop && (args.AllowedEffect & DragDropEffects.Copy) != 0
             && (IsInternalCollectionDrag(args.Data) || args.Data?.GetDataPresent(DataFormats.FileDrop, autoConvert: false) == true);
         args.Effect = supported ? DragDropEffects.Copy : DragDropEffects.None;
-        fileDrop.BackColor = supported ? DropHover : DropIdle;
+        SetCollectionDropAppearance(supported);
     }
 
     private async Task ReceiveCollectionDropAsync(DragEventArgs args)
     {
-        fileDrop.BackColor = DropIdle;
+        SetCollectionDropAppearance(false);
         if (!CanAcceptCollectionDrop || (args.AllowedEffect & DragDropEffects.Copy) == 0)
         {
             args.Effect = DragDropEffects.None;
@@ -346,6 +363,7 @@ internal sealed partial class InventoryForm
         viewCollection.Enabled = available;
         useCollection.Enabled = available;
         UpdateImageCollectionAction();
+        UpdateVideoResultActions();
     }
 
     private void OpenCollectionPlan()

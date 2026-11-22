@@ -8,6 +8,7 @@
     <AssemblyName>FileCheck</AssemblyName>
     <RootNamespace>FilesizeChecker</RootNamespace>
     <Product>FileCheck</Product>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <PathMap>$(MSBuildProjectDirectory)=/_/FileCheck</PathMap>

@@ -70,10 +70,20 @@ Abgeschlossene Verschiebeläufe bleiben auch nach einem Neustart rückgängig ma
 
 Bei einem unerwarteten Fehler pausiert das Tool den restlichen Sortierlauf. Es zeigt den Grund und den nächsten möglichen Schritt und bietet einen Sprung zum betroffenen Eintrag. Abgeschlossene, ausstehende und teilweise abgeschlossene Aktionen bleiben im Protokoll erkennbar. Sobald der tatsächliche Zustand eines teilweise abgeschlossenen Vorgangs geklärt ist, kann der Nutzer den Lauf fortsetzen oder abgeschlossene Verschiebungen zurücknehmen. Beim Fortsetzen prüft das Tool die ausstehenden Einträge erneut.
 
+### Videovergleich
+
+- Die Suche liest die Spieldauer der MP4-Videos in den ausgewählten Scan-Ordnern aus den Metadaten und nutzt die Dateigröße aus dem Inventar. Alle Dateien einer Gruppe möglicher Duplikate haben dieselbe Bytezahl und höchstens eine Sekunde Laufzeitspanne. Jedes Video gehört höchstens einer Gruppe an.
+- Die Trefferansicht folgt dem Bildvergleich mit Referenzwahl, Befundfilter, Ausschlüssen und horizontaler Vorschau. Sichtbare Dateien und Gruppen lassen sich in die Sammlung übernehmen. Die Suche zeigt Fortschritt sowie nicht lesbare Laufzeiten und unterstützt Abbruch. Vorschaubilder werden bei Bedarf geladen.
+- Ab zwei markierten Videos bietet die Trefferansicht eine Prüfung auf exakte Kopien und einen Sichtvergleich an. Die Kopienprüfung zeigt bytegleiche Gruppen. Im Sichtvergleich bleibt die Referenz neben der horizontal scrollbaren Vorschau der anderen Videos stehen. Jede Vorschau zeigt Anfang, Mitte und Ende. Darunter lässt sich der Vergleich mit der Referenz für die Sitzung als identisch, nicht identisch oder offen einstufen.
+
+### Lesbarkeit der Oberfläche
+
+- Blau hervorgehobene Steuerelemente verwenden weiße Schrift. Im Windows-Kontrastmodus gelten die Systemfarben für Markierungen.
+
 ## Weitere Ausbaustufen
 
 1. **Namens- und Versionsvergleich.** Unscharfe Namensähnlichkeit für Tippfehler und abweichende Wortreihenfolgen ergänzen. Dateifamilien mit nachvollziehbaren Hinweisen bilden, interne Versionsangaben etwa bei EXE, DLL und Installationspaketen auslesen und Inhaltsunterschiede für ausgewählte Office-, PDF- und Textformate sichtbar machen. Widersprüchliche Hinweise anzeigen und uneindeutige Versionsreihenfolgen offenlassen. Zwei beliebige Inventarstände oder Ordnerbestände gegenüberstellen und mögliche Verschiebungen oder Umbenennungen anhand übereinstimmender Inhalte kennzeichnen.
-2. **Erweiterter Bild- und Videovergleich.** Gedrehte Bildfassungen, Zuschnitte und ähnliche Serienbilder erkennen. Bei Videos umkodierte Vollkopien, gekürzte Fassungen und überlappende Ausschnitte erkennen. Für Ausschnitte die passenden Zeitbereiche anzeigen. Den Vergleich später mit einem separaten Testbestand aus synthetischen Medien prüfen.
+2. **Erweiterter Bild- und Videovergleich.** Gedrehte Bildfassungen, Zuschnitte und ähnliche Serienbilder erkennen. Bei Videos gekürzte Fassungen und überlappende Ausschnitte samt Zeitbereichen und später auch Tonspuren vergleichen. Die Fälle mit einem separaten synthetischen Medienbestand prüfen.
 
 Die Oberfläche zeigt den Grund für jeden Treffer. Namensähnlichkeit, Hinweise auf eine Versionsbeziehung, visuelle Ähnlichkeit und bestätigte Bytegleichheit haben jeweils eigene Befunde.
 

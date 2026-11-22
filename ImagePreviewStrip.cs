@@ -4,6 +4,8 @@ using FilesizeChecker.Inventory;
 namespace FilesizeChecker;
 
 internal sealed record ImagePreviewItem(ComparedImage Image, string Title, string Details, bool Muted, bool CanSetReference);
+internal sealed record PreviewStripItem(object Source, string Path, string Title, string Details, bool Muted,
+    bool CanSetReference, Func<CancellationToken, Bitmap> ReadThumbnail);
 
 internal sealed class ImagePreviewStrip : Control
 {
@@ -11,10 +13,10 @@ internal sealed class ImagePreviewStrip : Control
     private const int Gap = 8;
     private const int Step = CardWidth + Gap;
     private readonly HScrollBar scrollBar = new() { Dock = DockStyle.Bottom, Visible = false, SmallChange = Step };
-    private readonly ContextMenuStrip previewMenu = new();
+    private readonly ContextMenuStrip previewMenu = FileCheckTheme.CreateContextMenu();
     private readonly SemaphoreSlim thumbnailGate = new(1, 1);
     private readonly Dictionary<int, Thumbnail> thumbnails = [];
-    private ImagePreviewItem[] items = [];
+    private PreviewStripItem[] items = [];
     private CancellationTokenSource? loading;
     private int selectedIndex = -1;
     private int offset;
@@ -25,13 +27,13 @@ internal sealed class ImagePreviewStrip : Control
     public event Action<string>? ImageActivated;
     public event Action<string>? ReferenceRequested;
 
-    public ImagePreviewStrip()
+    public ImagePreviewStrip(string referenceLabel = "Als Referenzbild verwenden", string accessibleName = "Horizontal scrollbare Bildvorschau")
     {
         Dock = DockStyle.Fill;
         MinimumSize = new Size(0, 110);
         DoubleBuffered = true;
         BackColor = SystemColors.Window;
-        AccessibleName = "Horizontal scrollbare Bildvorschau";
+        AccessibleName = accessibleName;
         Controls.Add(scrollBar);
         scrollBar.ValueChanged += (_, _) =>
         {
@@ -39,7 +41,7 @@ internal sealed class ImagePreviewStrip : Control
             QueueThumbnails();
             Invalidate();
         };
-        var setReference = new ToolStripMenuItem("Als Referenzbild verwenden");
+        var setReference = new ToolStripMenuItem(referenceLabel);
         previewMenu.Items.Add(setReference);
         previewMenu.Opening += (_, args) => args.Cancel = referenceCandidate is null;
         previewMenu.Closed += (_, _) => referenceCandidate = null;
@@ -51,10 +53,14 @@ internal sealed class ImagePreviewStrip : Control
         ContextMenuStrip = previewMenu;
     }
 
-    public void SetItems(ImagePreviewItem[] value)
+    public void SetItems(ImagePreviewItem[] value) =>
+        SetPreviewItems(value.Select(item => new PreviewStripItem(item.Image, item.Image.File.Path, item.Title, item.Details,
+            item.Muted, item.CanSetReference, token => ReadImageThumbnail(item.Image, token))).ToArray());
+
+    public void SetPreviewItems(PreviewStripItem[] value)
     {
         bool sameFiles = items.Length == value.Length
-            && items.Zip(value).All(pair => ReferenceEquals(pair.First.Image, pair.Second.Image));
+            && items.Zip(value).All(pair => ReferenceEquals(pair.First.Source, pair.Second.Source));
         if (!sameFiles)
         {
             StopLoading();
@@ -71,7 +77,7 @@ internal sealed class ImagePreviewStrip : Control
 
     public void SelectImage(string? path)
     {
-        selectedIndex = Array.FindIndex(items, item => !item.Muted && InventoryPaths.Comparer.Equals(item.Image.File.Path, path));
+        selectedIndex = Array.FindIndex(items, item => !item.Muted && InventoryPaths.Comparer.Equals(item.Path, path));
         if (selectedIndex >= 0)
         {
             int left = Gap + selectedIndex * Step;
@@ -102,12 +108,12 @@ internal sealed class ImagePreviewStrip : Control
         if (bounds.Height < 72)
             return;
 
-        ImagePreviewItem item = items[index];
+        PreviewStripItem item = items[index];
         bool selected = index == selectedIndex;
-        Color accent = SystemInformation.HighContrast ? SystemColors.Highlight : Color.FromArgb(20, 88, 113);
-        Color background = selected ? (SystemInformation.HighContrast ? SystemColors.Highlight : Color.FromArgb(221, 241, 248))
+        Color accent = FileCheckTheme.SelectionBackground;
+        Color background = selected ? accent
             : item.Muted ? SystemColors.Control : SystemColors.Window;
-        Color text = selected && SystemInformation.HighContrast ? SystemColors.HighlightText
+        Color text = selected ? FileCheckTheme.SelectionForeground
             : item.Muted ? SystemColors.GrayText : SystemColors.WindowText;
         using var fill = new SolidBrush(background);
         using var border = new Pen(selected ? accent : SystemColors.ControlDark, selected ? 2 : 1);
@@ -158,11 +164,11 @@ internal sealed class ImagePreviewStrip : Control
     {
         base.OnMouseDown(e);
         int index = Math.Max(0, (e.X + offset - Gap) / Step);
-        ImagePreviewItem? item = index < items.Length && VisibleCard(index).Contains(e.Location) ? items[index] : null;
+        PreviewStripItem? item = index < items.Length && VisibleCard(index).Contains(e.Location) ? items[index] : null;
         if (e.Button == MouseButtons.Right)
-            referenceCandidate = item?.CanSetReference == true ? item.Image.File.Path : null;
+            referenceCandidate = item?.CanSetReference == true ? item.Path : null;
         if (e.Button == MouseButtons.Left && item is { Muted: false })
-            ImageActivated?.Invoke(item.Image.File.Path);
+            ImageActivated?.Invoke(item.Path);
     }
 
     protected override void OnMouseWheel(MouseEventArgs e)
@@ -248,8 +254,8 @@ internal sealed class ImagePreviewStrip : Control
                     if (thumbnails.ContainsKey(index))
                         continue;
                     cancellation.Token.ThrowIfCancellationRequested();
-                    ComparedImage image = items[index].Image;
-                    Thumbnail thumbnail = await Task.Run(() => ReadThumbnail(image, cancellation.Token));
+                    PreviewStripItem item = items[index];
+                    Thumbnail thumbnail = await Task.Run(() => ReadThumbnail(item, cancellation.Token));
                     if (cancellation.IsCancellationRequested)
                     {
                         thumbnail.Bitmap?.Dispose();
@@ -272,16 +278,22 @@ internal sealed class ImagePreviewStrip : Control
         }
     }
 
-    private static Thumbnail ReadThumbnail(ComparedImage image, CancellationToken token)
+    private static Bitmap ReadImageThumbnail(ComparedImage image, CancellationToken token)
+    {
+        byte[] preview = ImageComparison.ReadPreview(image, token);
+        using var stream = new MemoryStream(preview);
+        using var bitmap = Image.FromStream(stream);
+        return new Bitmap(bitmap);
+    }
+
+    private static Thumbnail ReadThumbnail(PreviewStripItem item, CancellationToken token)
     {
         try
         {
-            byte[] preview = ImageComparison.ReadPreview(image, token);
-            using var stream = new MemoryStream(preview);
-            using var bitmap = Image.FromStream(stream);
-            return new Thumbnail(new Bitmap(bitmap), null);
+            return new Thumbnail(item.ReadThumbnail(token), null);
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException
+            or DllNotFoundException or EntryPointNotFoundException or OverflowException)
         {
             return new Thumbnail(null, error.Message);
         }

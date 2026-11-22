@@ -451,7 +451,7 @@ internal sealed partial class InventoryForm
             ? collectedFiles.Count > 0 && !importingExplorerFiles : allFiles.Any(IsPresent);
         previewPlan.Enabled = !buildingPlan && !fileRunBusy && scanning is null && hasSource;
         previewPlan.Text = activePlan is null ? "Vorschau erstellen" : "Vorschau aktualisieren";
-        executePlan.Enabled = usable && scanning is null && duplicateRun is null && nameRun is null && imageRun is null
+        executePlan.Enabled = usable && scanning is null && duplicateRun is null && nameRun is null && imageRun is null && videoRun is null
             && (planScope.SelectedIndex != CollectedPlanScope || !importingExplorerFiles)
             && planRows.Any(row => !row.Excluded) && !planRows.Any(row => row.NeedsAttention);
         showPlanIssues.Enabled = usable && planRows.Length > 0;

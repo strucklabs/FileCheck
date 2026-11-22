@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Buffers.Binary;
 using System.Numerics;
 using System.Security.Cryptography;
@@ -113,7 +112,7 @@ internal sealed class ImageComparison(string cachePath)
             {
                 using FileStream stream = Open(file, out WindowsFileStamp? stamp);
                 // File systems without a reliable change stamp require proof from the complete encoded file.
-                string? contentHash = stamp?.CanCache == true ? null : ReadContentHash(stream, token);
+                string? contentHash = stamp?.CanCache == true ? null : ContentFingerprint.HashAndRewind(stream, token);
                 if (cache.TryGetValue(file.Path, out CachedImage? saved)
                     && saved.Features is { Width: > 0, Height: > 0, Colors.Length: ColorGridSize * ColorGridSize * 3 }
                     && (contentHash is null ? saved.ContentHash is null && saved.Stamp == stamp : saved.ContentHash == contentHash))
@@ -303,7 +302,7 @@ internal sealed class ImageComparison(string cachePath)
         using FileStream stream = Open(image.File, out WindowsFileStamp? stamp);
         if (stamp != image.Stamp)
             throw new IOException("Datei hat sich seit dem Bildvergleich geändert.");
-        if (image.ContentHash is string contentHash && ReadContentHash(stream, token) != contentHash)
+        if (image.ContentHash is string contentHash && ContentFingerprint.HashAndRewind(stream, token) != contentHash)
             throw new IOException("Datei hat sich seit dem Bildvergleich geändert.");
         using SKBitmap bitmap = Decode(stream, token, out _, out _);
         double scale = Math.Min(1, 640d / Math.Max(bitmap.Width, bitmap.Height));
@@ -313,29 +312,6 @@ internal sealed class ImageComparison(string cachePath)
             throw new IOException("Datei hat sich während der Vorschau geändert.");
         using SKData encoded = thumbnail.Encode(SKEncodedImageFormat.Png, 100);
         return encoded.ToArray();
-    }
-
-    private static string ReadContentHash(FileStream stream, CancellationToken token)
-    {
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
-        try
-        {
-            using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            while (true)
-            {
-                token.ThrowIfCancellationRequested();
-                int count = stream.Read(buffer);
-                if (count == 0)
-                    break;
-                hash.AppendData(buffer.AsSpan(0, count));
-            }
-            stream.Position = 0;
-            return Convert.ToHexString(hash.GetHashAndReset());
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
-        }
     }
 
     private static FileStream Open(FileEntry file, out WindowsFileStamp? stamp)

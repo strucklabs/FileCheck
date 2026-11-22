@@ -87,7 +87,7 @@ internal sealed partial class InventoryForm
         return tab;
     }
 
-    private bool NameJobAvailable => nameRun is null && scanning is null && duplicateRun is null && imageRun is null && !fileRunBusy;
+    private bool NameJobAvailable => nameRun is null && scanning is null && duplicateRun is null && imageRun is null && videoRun is null && !fileRunBusy;
 
     private void UpdateNameActions()
     {

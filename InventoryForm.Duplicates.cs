@@ -83,7 +83,7 @@ internal sealed partial class InventoryForm
 
     private void UpdateDuplicateActions()
     {
-        bool idle = scanning is null && duplicateRun is null && nameRun is null && imageRun is null && !fileRunBusy;
+        bool idle = scanning is null && duplicateRun is null && nameRun is null && imageRun is null && videoRun is null && !fileRunBusy;
         startDuplicates.Enabled = idle && duplicateCandidates.Length > 0;
         rebuildHashes.Enabled = idle;
         pauseDuplicates.Enabled = duplicateRun?.IsCancellationRequested == false;
@@ -101,7 +101,7 @@ internal sealed partial class InventoryForm
 
     private async Task SearchDuplicatesAsync()
     {
-        if (scanning is not null || duplicateRun is not null || nameRun is not null || imageRun is not null || fileRunBusy || duplicateCandidates.Length == 0)
+        if (scanning is not null || duplicateRun is not null || nameRun is not null || imageRun is not null || videoRun is not null || fileRunBusy || duplicateCandidates.Length == 0)
             return;
 
         using var cancellation = new CancellationTokenSource();
