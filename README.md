@@ -1,6 +1,6 @@
 # FileCheck
 
-FileCheck ist ein lokales Windows-Werkzeug der CheckTools-Reihe. Es erfasst Dateibestände, zeigt Speicherverbrauch und Änderungen, findet Kopien und erstellt nachvollziehbare Sortierpläne. Die Anwendung ist in Entwicklung. Der [Projektplan](PROJEKTPLAN.md) beschreibt Ausbau und Abnahmekriterien. Die dort genannten künftigen Funktionen gehören erst nach ihrer Umsetzung zum Programm.
+FileCheck ist ein lokales Windows-Werkzeug der CheckTools-Reihe. Es erfasst Dateibestände, zeigt Speicherverbrauch und Änderungen, findet Kopien und erstellt nachvollziehbare Sortierpläne. Die Anwendung liegt in Version 0.9.0 vor und ist in Entwicklung. Der [Projektplan](PROJEKTPLAN.md) beschreibt Ausbau und Abnahmekriterien. Die dort genannten künftigen Funktionen gehören erst nach ihrer Umsetzung zum Programm.
 
 ## Funktionen
 

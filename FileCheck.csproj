@@ -8,6 +8,7 @@
     <AssemblyName>FileCheck</AssemblyName>
     <RootNamespace>FilesizeChecker</RootNamespace>
     <Product>FileCheck</Product>
+    <Version>0.9.0</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
