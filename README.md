@@ -64,7 +64,7 @@ Scans, Dateiinhalte, Vergleiche und Vorschauen verarbeitet die Anwendung lokal. 
 
 ## Lizenz und Drittanbieter
 
-Für FileCheck ist im Repository bisher keine Projektlizenz festgelegt. Eine Lizenzfreigabe zur Weiterverwendung des Projektcodes ist damit nicht dokumentiert.
+Der FileCheck-Projektcode steht unter der [MIT-Lizenz](LICENSE). Für die folgenden Abhängigkeiten gelten ihre jeweiligen Lizenzbedingungen.
 
 - **PdfPig 0.1.16** für PDF-Metadaten und PDF-Text, Apache-2.0. [NuGet-Paket](https://www.nuget.org/packages/PdfPig/0.1.16)
 - **SkiaSharp 3.119.4** für Bildverarbeitung, MIT. [NuGet-Paket](https://www.nuget.org/packages/SkiaSharp/3.119.4)
